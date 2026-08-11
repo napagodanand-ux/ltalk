@@ -9,6 +9,11 @@ import signal
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+_project_root = Path(__file__).resolve().parent.parent
+load_dotenv(_project_root / ".env")
+
 from ltalk_core.db.connection import Database
 from ltalk_core.db.chats import ChatRepository
 from ltalk_core.db.migrations import run_migrations
