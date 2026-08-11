@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=LTalk
+Comment=LTalk - Secure Messaging
+Exec=ltalk %U
+Icon=ltalk
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+StartupNotify=true
+StartupWMClass=ltalk
+Keywords=chat;messaging;encrypted;secure;

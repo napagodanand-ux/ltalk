@@ -1,0 +1,35 @@
+version: 1
+update-information: 'https://github.com/ltalk/ltalk/releases'
+
+AppDir:
+  path: AppDir
+  AppRun:
+    Exec: ltalk
+    Wrapper: env QT_QPA_PLATFORM=xcb
+
+  DesktopFiles:
+    - ltalk.desktop
+
+  Icon:
+    File: ltalk.png
+    StartupNotify: true
+
+  Binaries:
+    - ltalk
+    - ltalkd
+
+  Libraries:
+    - libPySide6.so*
+    - libQt6*.so*
+
+  Files:
+    Excludes:
+      - usr/share/doc
+      - usr/share/man
+      - usr/share/icons/hicolor/8x8
+      - usr/share/icons/hicolor/16x16
+
+AppImage:
+  arch: x86_64
+  license: gpl-3.0-only
+  update-information: 'https://github.com/ltalk/ltalk/releases'

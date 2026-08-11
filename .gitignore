@@ -1,0 +1,64 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Keyring fallback key
+.encryption_key
+
+# Build artifacts
+target/
+*.AppImage
+*.deb
+*.rpm
+
+# Cargo (libsignal submodule builds)
+libsignal/target/
+
+# Qt/QML artifacts
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
