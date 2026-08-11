@@ -96,6 +96,7 @@ def _get_key_secretstorage(service: str, label: str) -> bytes:
             "purpose": "encryption",
         },
         new_key,
+        content_type="application/octet-stream",
         replace=True,
     )
     logger.info("Generated new encryption key and stored in keyring")
