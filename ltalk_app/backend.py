@@ -104,6 +104,7 @@ class Backend(QObject):
         super().__init__(parent)
         self._db = db
         self._supabase = supabase
+        self._database = database
 
         # Models
         self._chatListModel = chat_list_model
@@ -636,7 +637,10 @@ class Backend(QObject):
                         self.messageListChanged.emit(self._current_chat_id)
             except Exception as e:
                 logger.debug("Disappearing messages cleanup error: %s", e)
-            await asyncio.sleep(60)
+            try:
+                await asyncio.sleep(60)
+            except RuntimeError:
+                break
 
     async def _on_new_message(self, payload: dict) -> None:
         if payload.get("eventType") != "INSERT":
