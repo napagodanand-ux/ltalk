@@ -69,7 +69,7 @@ This document is the canonical record of audit findings and the remediation plan
 - `/tmp/ltalk-{uid}.sock`: no symlink check, no peer auth, unbounded frame size.
 - `IpcProtocol.feed` grows buffer unboundedly; `deserialize` accepts arbitrary JSON.
 
-**Status: DONE** — IPC hardened and wired: `IpcProtocol` enforces a 1 MiB frame cap (raises `ValueError` on overflow, connection dropped); `IpcServer` authenticates peers via `SO_PEERCRED` (fail-closed: only same-uid connections accepted); `_handle_typing` forwards to other connected GUI clients instead of `pass`; GUI `Backend` connects its `IpcClient` on startup (sends `GUI_OPENED`, handles `NEW_MESSAGE`/`SYNC_STATE` pushes) and the daemon broadcasts `NEW_MESSAGE` to the GUI on receipt; `MessageController.handle_incoming` dedups (same message can arrive via GUI realtime + daemon IPC). `AUTH_TOKEN_REFRESH` IPC message removed — token rotation propagates via the shared `local_user` row instead (see S2).
+**Status: DONE** — IPC hardened and wired: `IpcProtocol` enforces a 1 MiB frame cap (raises `ValueError` on overflow, connection dropped); `IpcServer` authenticates peers via `SO_PEERCRED` (fail-closed: only same-uid connections accepted); `_handle_typing` forwards to other connected GUI clients instead of `pass`; GUI `Backend` connects its `IpcClient` on startup (sends `GUI_OPENED`, handles `NEW_MESSAGE`/`SYNC_STATE` pushes) and the daemon broadcasts `NEW_MESSAGE` to the GUI on receipt; `MessageController.handle_incoming` dedups (same message can arrive via GUI realtime + daemon IPC). Socket hygiene: path unlinked before bind + `chmod 0600`; with peer creds the only residual vector is a same-uid DoS (pre-creating a directory at the socket path). `AUTH_TOKEN_REFRESH` IPC message removed — token rotation propagates via the shared `local_user` row instead (see S2).
 
 ### A4. Offline queue can never drain — messages silently lost
 - `_drain_offline_queue` inserts `"content":` (no such column) and uses queue rowid as message id (backend.py:610-628).
@@ -86,7 +86,7 @@ This document is the canonical record of audit findings and the remediation plan
 - Server `created_at` TIMESTAMPTZ string vs local INTEGER column.
 
 **Fix (Phase 0, DONE)**: sync now writes chat members locally (skipping self for direct chats) so the sidebar shows the correct peer name; removed dead display-name computation.
-**Fix (Phase 1, DONE)**: server-side `chat_summaries` view (`security_invoker = true` so member-scoped RLS applies) returns chat + members JSON + epoch-second timestamps in **one query** — replaces the N+1 storm (backend `_sync_data` now makes 3 queries total for contacts/chats/messages). `to_epoch()` in `ltalk_core/timestamps.py` unifies server ISO/epoch values with the local INTEGER epoch columns (prevents ISO strings landing in `created_at`). Preview honesty: no more ciphertext previews — chat-list previews come from locally decrypted messages only.
+**Fix (Phase 1, DONE)**: server-side `chat_summaries` view (`security_invoker = true` so member-scoped RLS applies) returns chat + members JSON + epoch-second timestamps in **one query** — replaces the per-chat chat/members/profile storm (backend `_sync_data` now makes 2 queries + one per chat for recent messages; the N×profile+members lookups are gone). `to_epoch()` in `ltalk_core/timestamps.py` unifies server ISO/epoch values with the local INTEGER epoch columns (prevents ISO strings landing in `created_at`). Preview honesty: no more ciphertext previews — chat-list previews come from locally decrypted messages only.
 **Fix (Phase 2, DEFERRED)**: decrypt previews client-side (needs C1).
 
 ### A6. Column-name mismatches across the stack
@@ -100,7 +100,7 @@ This document is the canonical record of audit findings and the remediation plan
 
 | ID | Issue | Fix (Phase) | Status |
 |---|---|---|---|
-| S1 | RLS: `message_status`/`calls` SELECT open to all authenticated users; missing `chats`/`message_status` DELETE policies; inserts don't check chat membership | Membership-scoped policies + delete policies (Phase 1) | DONE (Phase 1): `messages`/`message_status`/`calls` INSERT/UPDATE scoped to chat membership; `chats_delete` creator-or-admin; `chat_members_insert` creator/group-admin only (no self-join, needs `chats.created_by` — client sets it); `chats_delete`, `chat_members_delete`, `message_status_delete`, `calls_delete` added; static contract tests in `tests/test_schema.py` |
+| S1 | RLS: `message_status`/`calls` SELECT open to all authenticated users; missing `chats`/`message_status` DELETE policies; inserts don't check chat membership | Membership-scoped policies + delete policies (Phase 1) | DONE (Phase 1): `messages`/`message_status`/`calls` INSERT/UPDATE scoped to chat membership; delete policies added (`chats_delete` creator-or-admin, `chat_members_delete` self or creator/admin, `message_status_delete`, `calls_delete`); `chat_members_insert` creator/group-admin only (no self-join, needs `chats.created_by` — client sets it); static contract tests in `tests/test_schema.py` |
 | S2 | JWT + refresh_token plaintext in local DB (only safe if C3 holds); daemon never refreshes expired tokens; realtime/presence die silently after expiry | Central TokenManager, refresh-on-401, daemon↔GUI refresh propagation (Phase 1) | DONE (Phase 1): `TokenManager` (`ltalk_core/supabase/token_manager.py`) refreshes proactively (~75% of lifetime, ≥60s grace, backoff on failure), persists rotated tokens to `local_user`, and runs in **both** GUI and daemon — propagation is implicit via the shared DB (daemon↔GUI `AUTH_TOKEN_REFRESH` IPC message removed). On rotation both processes reconnect Realtime so subscriptions never die on expiry. On-401 refresh for individual requests remains Phase 2 |
 | S3 | Logs leak plaintext: `notification_sender.py:44` logs `message[:50]` to disk | Redact bodies; log ids/hashes only (Phase 2) | DEFERRED |
 | S4 | `service_role_key` field in `SupabaseConfig` invites misuse | Remove from client; service-role ops → edge functions (Phase 1) | DONE (Phase 1): field removed from `SupabaseConfig` + docstring requires Edge Functions for service-role work; no service-role key in schema (`tests/test_schema.py` enforces) |
@@ -164,7 +164,7 @@ This document is the canonical record of audit findings and the remediation plan
 - S3: log redaction + rotation; structured JSON logs.
 - Ruff to zero; strict mypy incl. `ltalk_app`; CI: submodule checkout, libsignal build, sqlcipher wheels.
 - Contract tests for wire rows (local ↔ server), realtime protocol, RLS.
-- Ctrl+C/tray: replace `os.system` with proper process APIs; remove stray `FinalizerAdapter`-style hacks if any remain.
+- Graceful daemon stop paths (Ctrl+C already signals SIGTERM/SIGINT → `stop()`; verify window-close/quit flows); remove stray `FinalizerAdapter`-style hacks if any remain.
 
 ### Phase 3 — feature integrity
 - Typing indicators via proper realtime broadcast channel (current `typing:*` topic is not a Supabase topic).
