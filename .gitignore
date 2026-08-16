@@ -58,6 +58,9 @@ target/
 # Cargo (libsignal submodule builds)
 libsignal/target/
 
+# Native libraries (must be built/installed, never committed)
+*.so
+
 # Qt/QML artifacts
 moc_*.cpp
 qrc_*.cpp

@@ -86,18 +86,36 @@ def _run_sync() -> None:
 
 
 def main() -> None:
-    """Synchronous entry point."""
+    """Entry point."""
     setup_logging()
     logger.info("Starting LTalk GUI")
 
-    if qasync is not None:
-        asyncio.run(_main_async())
-    else:
+    if qasync is None:
         _run_sync()
+        return
+
+    app = QGuiApplication(sys.argv)
+    app.setApplicationName("LTalk")
+    app.setOrganizationName("LTalk")
+
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
+
+    async def _bootstrap() -> None:
+        try:
+            await _main_async(app)
+        except Exception:
+            logger.exception("LTalk initialization failed")
+            app.exit(1)
+
+    loop.create_task(_bootstrap())
+
+    with loop:
+        loop.run_forever()
 
 
-async def _main_async() -> None:
-    """Async main entry point."""
+async def _main_async(app: QGuiApplication) -> None:
+    """Initialize the application on the running qasync loop."""
     # Initialize database
     db = Database()
     db.connect()
@@ -107,11 +125,6 @@ async def _main_async() -> None:
     config = SupabaseConfig(url=SUPABASE_URL, anon_key=SUPABASE_ANON_KEY)
     supabase = SupabaseClient(config)
     await supabase.initialize()
-
-    # Create Qt application
-    app = QGuiApplication(sys.argv)
-    app.setApplicationName("LTalk")
-    app.setOrganizationName("LTalk")
 
     # Set up QML engine
     engine = QQmlApplicationEngine()
@@ -153,21 +166,17 @@ async def _main_async() -> None:
 
     if not engine.rootObjects():
         logger.error("Failed to load QML")
-        sys.exit(1)
+        app.exit(1)
+        return
 
-    # Run with async event loop
-    loop = qasync.QEventLoop(app)
-    asyncio.set_event_loop(loop)
-
-    def _on_about_to_quit():
-        if backend._realtime:
-            backend._realtime.stop()
-        db.close()
+    def _on_about_to_quit() -> None:
+        try:
+            if backend._realtime:
+                backend._realtime.stop()
+        finally:
+            db.close()
 
     app.aboutToQuit.connect(_on_about_to_quit)
-
-    with loop:
-        loop.run_forever()
 
 
 if __name__ == "__main__":

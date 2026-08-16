@@ -10,11 +10,14 @@ import httpx
 
 @dataclass
 class SupabaseConfig:
-    """Supabase project configuration."""
+    """Supabase project configuration.
+
+    Only the anon key lives in the client. Privileged server-side
+    operations (service-role) must go through Supabase Edge Functions.
+    """
 
     url: str
     anon_key: str
-    service_role_key: Optional[str] = None
 
     @property
     def api_url(self) -> str:

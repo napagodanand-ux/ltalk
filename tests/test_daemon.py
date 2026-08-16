@@ -15,7 +15,7 @@ class TestDaemonIpc:
             "UPDATE_PRESENCE", "SHUTDOWN_DAEMON",
             "NEW_MESSAGE", "MESSAGE_STATUS", "INCOMING_CALL",
             "TYPING_INDICATOR", "PRESENCE_UPDATE", "SYNC_STATE",
-            "ERROR", "AUTH_TOKEN_REFRESH",
+            "ERROR",
         ]
         for msg_type in required_types:
             assert hasattr(IpcMessageType, msg_type)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -15,8 +14,9 @@ HEARTBEAT_INTERVAL = 60  # seconds
 class PresenceHeartbeat:
     """Sends periodic presence heartbeats to Supabase."""
 
-    def __init__(self, supabase_client: Any) -> None:
+    def __init__(self, supabase_client: Any, db: Any = None) -> None:
         self._supabase = supabase_client
+        self._db = db
         self._running = False
         self._task: asyncio.Task | None = None
         self._online = False
@@ -69,10 +69,15 @@ class PresenceHeartbeat:
             return self._cached_user_id
         try:
             from ltalk_core.db.connection import Database
-            db = Database()
-            db.connect()
-            row = db.fetchone("SELECT id FROM local_user LIMIT 1")
-            db.close()
+            owns_connection = self._db is None
+            db = self._db if not owns_connection else Database()
+            if owns_connection:
+                db.connect()
+            try:
+                row = db.fetchone("SELECT id FROM local_user LIMIT 1")
+            finally:
+                if owns_connection:
+                    db.close()
             if row:
                 self._cached_user_id = row["id"]
                 return self._cached_user_id
@@ -90,10 +95,7 @@ class PresenceHeartbeat:
                 return
             from ltalk_core.supabase.database import SupabaseDatabase
             db = SupabaseDatabase(self._supabase)
-            await db.update("profiles", {
-                "online": True,
-                "last_seen": "now()",
-            }, {"user_id": f"eq.{user_id}"})
+            await db.update("profiles", {"online": True}, {"id": user_id})
         except Exception as e:
             logger.debug("Failed to set online: %s", e)
 
@@ -107,9 +109,6 @@ class PresenceHeartbeat:
                 return
             from ltalk_core.supabase.database import SupabaseDatabase
             db = SupabaseDatabase(self._supabase)
-            await db.update("profiles", {
-                "online": False,
-                "last_seen": "now()",
-            }, {"user_id": f"eq.{user_id}"})
+            await db.update("profiles", {"online": False}, {"id": user_id})
         except Exception as e:
             logger.debug("Failed to set offline: %s", e)

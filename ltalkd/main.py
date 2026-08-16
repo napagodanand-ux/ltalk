@@ -8,6 +8,7 @@ import os
 import signal
 import sys
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -20,6 +21,8 @@ from ltalk_core.db.migrations import run_migrations
 from ltalk_core.supabase.auth import SupabaseAuth
 from ltalk_core.supabase.client import SupabaseClient, SupabaseConfig
 from ltalk_core.supabase.database import SupabaseDatabase
+from ltalk_core.supabase.token_manager import TokenManager
+from ltalk_core.ipc.protocol import IpcMessage
 
 from .ipc_server import IpcServer
 from .media_keys import GlobalHotkeyHandler
@@ -66,6 +69,7 @@ class Daemon:
         self._queue: QueueProcessor | None = None
         self._presence: PresenceHeartbeat | None = None
         self._global_hotkeys: GlobalHotkeyHandler | None = None
+        self._token_manager: TokenManager | None = None
 
     async def start(self) -> None:
         """Start all daemon services."""
@@ -90,12 +94,19 @@ class Daemon:
         if row and row["jwt"]:
             self._supabase.set_tokens(row["jwt"], row["refresh_token"])
 
+        # Proactive token refresh so Realtime/presence never die on expiry
+        self._token_manager = TokenManager(
+            self._supabase, SupabaseAuth(self._supabase), self._db
+        )
+        self._token_manager.on_token_updated(self.reconnect_realtime)
+        await self._token_manager.start()
+
         # Start services
         self._notifications = NotificationSender()
         self._tray = TrayManager(self)
         self._ipc = IpcServer(self)
         self._queue = QueueProcessor(self._db, self._supabase)
-        self._presence = PresenceHeartbeat(self._supabase)
+        self._presence = PresenceHeartbeat(self._supabase, db=self._db)
         self._realtime = RealtimeListener(self._supabase, self._on_message_received)
 
         # Global hotkeys
@@ -132,6 +143,8 @@ class Daemon:
         logger.info("Stopping LTalk daemon")
         self._running = False
 
+        if self._token_manager:
+            await self._token_manager.stop()
         if self._global_hotkeys:
             self._global_hotkeys.stop()
         if self._realtime:
@@ -157,7 +170,7 @@ class Daemon:
         except Exception as e:
             logger.debug("Failed to focus window: %s", e)
 
-    async def _on_message_received(self, payload: dict) -> None:
+    async def _on_message_received(self, payload: dict[str, Any]) -> None:
         """Handle incoming message from Realtime."""
         if payload.get("eventType") != "INSERT":
             return
@@ -165,16 +178,26 @@ class Daemon:
         chat_id = record.get("chat_id")
         sender_id = record.get("sender_id")
 
+        if sender_id == self._get_local_user_id():
+            return
+
+        # Push to a connected GUI so the open window updates instantly
+        if self._ipc:
+            await self._ipc.broadcast_to_gui(IpcMessage.new_message(record))
+
         # Get sender name
         sender_name = "Unknown"
-        try:
-            profile = await self._supabase.database.select(
-                "profiles", filters={"id": f"eq.{sender_id}"}
-            )
-            if profile:
-                sender_name = profile[0].get("display_name", "Unknown")
-        except Exception:
-            pass
+        if self._supabase is not None:
+            try:
+                from ltalk_core.supabase.database import SupabaseDatabase
+                db = SupabaseDatabase(self._supabase)
+                profile = await db.select(
+                    "profiles", filters={"id": sender_id}
+                )
+                if profile:
+                    sender_name = profile[0].get("display_name", "Unknown")
+            except Exception:
+                pass
 
         # Send notification
         if self._notifications:
@@ -188,6 +211,18 @@ class Daemon:
         if self._tray and self._chat_repo:
             total = self._chat_repo.get_total_unread()
             self._tray.update_badge(total + 1)
+
+    def _get_local_user_id(self) -> str | None:
+        """Get the local user's ID from the database."""
+        if not self._db:
+            return None
+        try:
+            row = self._db.fetchone("SELECT id FROM local_user LIMIT 1")
+            if row:
+                return str(row["id"])
+        except Exception:
+            pass
+        return None
 
     def set_auth(self, jwt: str, refresh_token: str, user_id: str) -> None:
         """Update authentication tokens from GUI."""

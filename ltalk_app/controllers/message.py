@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -90,7 +91,13 @@ class MessageController:
             })
         except Exception as e:
             logger.warning("Failed to send message, queued: %s", e)
-            self._offline_queue.enqueue(chat_id, encrypted, "text")
+            self._offline_queue.enqueue(
+                chat_id=chat_id,
+                encrypted_content=encrypted,
+                message_type="text",
+                message_id=message_id,
+                sender_id=user_id,
+            )
 
         return message_id
 
@@ -125,7 +132,15 @@ class MessageController:
             })
         except Exception as e:
             logger.warning("Failed to send reply, queued: %s", e)
-            self._offline_queue.enqueue(chat_id, encrypted, "text")
+            self._offline_queue.enqueue(
+                chat_id=chat_id,
+                encrypted_content=encrypted,
+                message_type="text",
+                message_id=message_id,
+                sender_id=user_id,
+                metadata_json="{}",
+                reply_to=reply_to,
+            )
 
         return message_id
 
@@ -156,6 +171,11 @@ class MessageController:
             msg_type = MessageType.IMAGE if file_type == "image" else MessageType.DOCUMENT
             content = f"[{file_type.upper()}:{file_name}]"
             encrypted = await self._encryptor.encrypt_message(chat_id, content, self._supabase)
+            metadata = {
+                "file_name": file_name,
+                "file_url": file_url,
+                "mime_type": content_type,
+            }
 
             msg = Message(
                 id=message_id,
@@ -164,6 +184,7 @@ class MessageController:
                 message_type=msg_type,
                 encrypted_content=encrypted,
                 plaintext_content=file_url,
+                metadata_json=json.dumps(metadata),
                 created_at=time.time(),
             )
             self._message_repo.insert(msg)
@@ -175,11 +196,19 @@ class MessageController:
                     "chat_id": chat_id,
                     "sender_id": user_id,
                     "message_type": msg_type.value,
-                    "content": file_url,
+                    "encrypted_content": encrypted,
+                    "metadata": metadata,
                 })
             except Exception as e:
                 logger.warning("Remote send failed, queuing: %s", e)
-                self._offline_queue.enqueue(chat_id, file_url, msg_type.value)
+                self._offline_queue.enqueue(
+                    chat_id=chat_id,
+                    encrypted_content=encrypted,
+                    message_type=msg_type.value,
+                    message_id=message_id,
+                    sender_id=user_id,
+                    metadata_json=json.dumps(metadata),
+                )
 
             return message_id
 
@@ -234,6 +263,15 @@ class MessageController:
         message_id = record.get("id")
         sender_id = record.get("sender_id")
         encrypted_content = record.get("encrypted_content", "")
+
+        if not message_id or not chat_id:
+            return None
+
+        # Dedup: the GUI may receive the same message via its own
+        # Realtime subscription and via the daemon's IPC broadcast.
+        if self._message_repo.get_by_id(message_id):
+            logger.debug("Ignoring duplicate incoming message %s", message_id)
+            return None
 
         ctx = get_context_filter()
         ctx.set_context(user_id=current_user_id, chat_id=chat_id)

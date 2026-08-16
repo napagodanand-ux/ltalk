@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import time
-import uuid
 from typing import Optional
 
 from PySide6.QtCore import QObject, Property, Signal, Slot
@@ -24,11 +23,15 @@ from ltalk_core.db.connection import Database
 from ltalk_core.db.contacts import ContactRepository
 from ltalk_core.db.messages import MessageRepository
 from ltalk_core.db.queue import OfflineQueue
+from ltalk_core.ipc.protocol import IpcMessage, IpcMessageType
 from ltalk_core.supabase.auth import SupabaseAuth
 from ltalk_core.supabase.client import SupabaseClient
 from ltalk_core.supabase.database import SupabaseDatabase
 from ltalk_core.supabase.realtime import SupabaseRealtime
 from ltalk_core.supabase.storage import SupabaseStorage
+from ltalk_core.supabase.token_manager import TokenManager
+from ltalk_core.timestamps import to_epoch
+from ltalk_core.types.chat import Chat, ChatMember, ChatRole
 from ltalk_core.types.message import Message, MessageStatus, MessageType
 from ltalk_core.validation import (
     validate_display_name,
@@ -46,6 +49,7 @@ from .controllers.chat import ChatController
 from .controllers.contact import ContactController
 from .controllers.message import MessageController
 from .controllers.settings import SettingsController
+from .ipc_client import IpcClient
 from .models.chat_list_model import ChatListModel
 from .models.message_list_model import MessageListModel
 from .models.status_model import StatusModel
@@ -104,6 +108,7 @@ class Backend(QObject):
         super().__init__(parent)
         self._db = db
         self._supabase = supabase
+        self._auth = auth
         self._database = database
 
         # Models
@@ -138,6 +143,10 @@ class Backend(QObject):
         self._is_connected = False
         self._is_authenticated = False
         self._refresh_lock = asyncio.Lock()
+        self._ipc: Optional[IpcClient] = None
+        self._token_manager: Optional[TokenManager] = None
+        self._queue_drained = False
+        self._disappearing_task: Optional[asyncio.Future] = None
 
     @Property(bool, notify=isAuthenticatedChanged)
     def isAuthenticated(self) -> bool:
@@ -150,6 +159,9 @@ class Backend(QObject):
         session = self._auth_ctrl.get_stored_session()
         if session is None:
             return
+
+        self._ensure_token_manager()
+        await self._connect_ipc()
 
         jwt_expires = session["jwt_expires_at"]
         if time.time() < jwt_expires:
@@ -172,6 +184,14 @@ class Backend(QObject):
 
     async def shutdown(self) -> None:
         """Clean up resources."""
+        if self._token_manager:
+            await self._token_manager.stop()
+        if self._ipc:
+            try:
+                await self._ipc.send(IpcMessage.gui_closed())
+            except Exception:
+                pass
+            await self._ipc.disconnect()
         if self._realtime:
             await self._realtime.disconnect()
         if self._supabase.is_authenticated:
@@ -201,6 +221,8 @@ class Backend(QObject):
         try:
             self._current_user_id = await self._auth_ctrl.sign_in(email, password)
             self._set_authenticated(True)
+            self._ensure_token_manager()
+            await self._connect_ipc()
             await self._setup_realtime()
             await self._sync_data()
         except Exception as e:
@@ -222,6 +244,8 @@ class Backend(QObject):
         try:
             self._current_user_id = await self._auth_ctrl.sign_up(email, password, display_name)
             self._set_authenticated(True)
+            self._ensure_token_manager()
+            await self._connect_ipc()
             await self._setup_realtime()
             await self._sync_data()
         except Exception as e:
@@ -235,6 +259,8 @@ class Backend(QObject):
     async def _logout_async(self) -> None:
         self._set_authenticated(False)
         self._current_user_id = ""
+        self._queue_drained = False
+        self._disappearing_task = None
         if self._realtime:
             await self._realtime.disconnect()
             self._realtime = None
@@ -482,6 +508,46 @@ class Backend(QObject):
 
     # --- Internal sync/realtime ---
 
+    def _ensure_token_manager(self) -> None:
+        """Create/start the proactive token refresh loop once per session."""
+        if self._token_manager is None:
+            self._token_manager = TokenManager(self._supabase, self._auth, self._db)
+            self._token_manager.on_token_updated(self._on_tokens_updated)
+        if not self._token_manager.is_running():
+            _safe_ensure_future(self._token_manager.start(), "tokenManager")
+
+    async def _on_tokens_updated(self) -> None:
+        """Reconnect Realtime after token rotation so it never dies on expiry."""
+        await self._refresh_realtime()
+
+    async def _connect_ipc(self) -> None:
+        """Connect to the daemon (if running) for pushes and lifecycle events."""
+        if self._ipc is not None:
+            return
+        ipc = IpcClient()
+        ipc.on(IpcMessageType.NEW_MESSAGE, self._on_ipc_new_message)
+        ipc.on(IpcMessageType.SYNC_STATE, self._on_ipc_sync_state)
+        if await ipc.connect():
+            self._ipc = ipc
+            try:
+                await ipc.send(IpcMessage.gui_opened())
+            except Exception:
+                pass
+            logger.info("IPC link with daemon established")
+
+    async def _on_ipc_new_message(self, message: IpcMessage) -> None:
+        """Handle a NEW_MESSAGE push from the daemon."""
+        await self._on_new_message({"eventType": "INSERT", "record": message.data})
+
+    async def _on_ipc_sync_state(self, message: IpcMessage) -> None:
+        """Daemon reports aggregate state (e.g. unread totals)."""
+        try:
+            total_unread = int(message.data.get("total_unread", 0))
+        except (TypeError, ValueError):
+            return
+        if total_unread > 0:
+            self.chatListChanged.emit()
+
     async def _sync_data(self) -> None:
         """Sync data from Supabase to local DB after login."""
         try:
@@ -498,51 +564,46 @@ class Backend(QObject):
                     None,
                 )
 
-            chats_data = await self._database.select(
-                "chat_members",
-                columns="chat_id",
-                filters={"user_id": self._current_user_id},
+            summaries = await self._database.select(
+                "chat_summaries",
+                columns=(
+                    "id,is_group,group_name,group_avatar_url,group_admin_id,"
+                    "created_at,updated_at,last_message_at,members"
+                ),
+                order="last_message_at",
+                ascending=False,
             )
-            chat_ids = [cm["chat_id"] for cm in chats_data]
 
-            for chat_id in chat_ids:
-                chat_info = await self._database.select("chats", filters={"id": chat_id})
-                if not chat_info:
-                    continue
-                chat = chat_info[0]
+            for row in summaries:
+                chat_id = row["id"]
+                is_group = row.get("is_group", False)
 
-                members = await self._database.select("chat_members", filters={"chat_id": chat_id})
-                member_names = []
-                for m in members:
-                    profile = await self._database.select("profiles", filters={"id": m["user_id"]})
-                    if profile:
-                        member_names.append(profile[0].get("display_name", "Unknown"))
+                for m in row.get("members") or []:
+                    if not is_group and m.get("user_id") == self._current_user_id:
+                        continue
+                    member = ChatMember(
+                        user_id=m["user_id"],
+                        display_name=m.get("display_name") or "Unknown",
+                        avatar_url=m.get("avatar_url"),
+                        role=ChatRole(m.get("role", "member")),
+                    )
+                    self._chat_repo.insert_member(chat_id, member)
 
-                display_name = chat.get("group_name") or (member_names[0] if member_names else "Unknown")
-
-                last_msg = await self._database.select(
-                    "messages",
-                    columns="encrypted_content, created_at",
-                    filters={"chat_id": chat_id},
-                    order="created_at",
-                    ascending=False,
-                    limit=1,
-                )
-                last_preview = last_msg[0]["encrypted_content"][:100] if last_msg else ""
-                last_time = last_msg[0]["created_at"] if last_msg else 0
-
-                from ltalk_core.types.chat import Chat
                 chat_obj = Chat(
                     id=chat_id,
-                    is_group=chat.get("is_group", False),
-                    group_name=chat.get("group_name"),
-                    last_message_preview=last_preview,
-                    last_message_at=last_time,
+                    is_group=is_group,
+                    group_name=row.get("group_name"),
+                    group_avatar_url=row.get("group_avatar_url"),
+                    group_admin_id=row.get("group_admin_id"),
+                    created_at=to_epoch(row.get("created_at")),
+                    updated_at=to_epoch(row.get("updated_at")),
+                    last_message_at=to_epoch(row.get("last_message_at")),
                 )
                 self._chat_repo.insert(chat_obj)
 
                 messages_data = await self._database.select(
                     "messages",
+                    columns="id,sender_id,message_type,encrypted_content,created_at,deleted_for_everyone",
                     filters={"chat_id": chat_id},
                     order="created_at",
                     limit=50,
@@ -554,8 +615,7 @@ class Backend(QObject):
                         sender_id=msg.get("sender_id", ""),
                         message_type=MessageType(msg.get("message_type", "text")),
                         encrypted_content=msg.get("encrypted_content", ""),
-                        plaintext_content=msg.get("encrypted_content", "")[:100],
-                        created_at=msg.get("created_at", 0),
+                        created_at=to_epoch(msg.get("created_at")),
                         deleted_for_everyone=msg.get("deleted_for_everyone", False),
                     )
                     self._message_repo.insert(msg_obj)
@@ -598,14 +658,17 @@ class Backend(QObject):
         )
 
         await self._realtime.subscribe(
-            topic=f"realtime:public:messages:chat_id=eq.{self._current_chat_id}",
+            topic="realtime:public:messages",
             callback=self._on_new_message,
             table="messages",
         )
 
         await self._realtime.connect()
-        await self._drain_offline_queue()
-        asyncio.ensure_future(self._disappearing_messages_loop())
+        if not self._queue_drained:
+            self._queue_drained = True
+            await self._drain_offline_queue()
+        if self._disappearing_task is None:
+            self._disappearing_task = asyncio.ensure_future(self._disappearing_messages_loop())
 
     async def _drain_offline_queue(self) -> None:
         queued = self._offline_queue.dequeue(limit=20)
@@ -615,15 +678,17 @@ class Backend(QObject):
         for msg in queued:
             try:
                 await self._database.insert("messages", {
-                    "id": msg.get("id", str(uuid.uuid4())),
+                    "id": msg["message_id"],
                     "chat_id": msg["chat_id"],
-                    "sender_id": self._current_user_id,
+                    "sender_id": msg.get("sender_id") or self._current_user_id,
                     "message_type": msg.get("message_type", "text"),
-                    "content": msg["encrypted_content"],
+                    "encrypted_content": msg["encrypted_content"],
+                    "metadata": json.loads(msg.get("metadata_json") or "{}"),
+                    "reply_to": msg.get("reply_to"),
                 })
                 self._offline_queue.mark_sent(msg["id"])
             except Exception as e:
-                logger.warning("Failed to send queued message %s: %s", msg["id"], e)
+                logger.warning("Failed to send queued message %s: %s", msg["message_id"], e)
                 self._offline_queue.mark_failed(msg["id"])
         self._offline_queue.purge_stale()
 

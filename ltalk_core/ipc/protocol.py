@@ -28,7 +28,6 @@ class IpcMessageType(str, Enum):
     PRESENCE_UPDATE = "presence_update"
     SYNC_STATE = "sync_state"
     ERROR = "error"
-    AUTH_TOKEN_REFRESH = "auth_token_refresh"
 
 
 @dataclass
@@ -121,23 +120,33 @@ class IpcMessage:
             request_id=request_id,
         )
 
-    @classmethod
-    def auth_token_refresh(cls, jwt: str, refresh_token: str, expires_at: float) -> IpcMessage:
-        return cls(
-            type=IpcMessageType.AUTH_TOKEN_REFRESH,
-            data={"jwt": jwt, "refresh_token": refresh_token, "jwt_expires_at": expires_at},
-        )
-
 
 class IpcProtocol:
-    """Manages IPC message framing over a stream socket."""
+    """Manages IPC message framing over a stream socket.
 
-    def __init__(self) -> None:
+    Frames are newline-delimited JSON with a hard size cap so a
+    misbehaving peer cannot exhaust memory. The default cap keeps
+    messages well above realistic payloads while bounding overhead.
+    """
+
+    DEFAULT_MAX_FRAME_SIZE = 1024 * 1024  # 1 MiB
+
+    def __init__(self, max_frame_size: int = DEFAULT_MAX_FRAME_SIZE) -> None:
+        if max_frame_size <= 0:
+            raise ValueError("max_frame_size must be positive")
         self._buffer = b""
+        self._max_frame_size = max_frame_size
 
     def feed(self, data: bytes) -> list[IpcMessage]:
-        """Feed raw bytes from socket, return complete messages."""
+        """Feed raw bytes from socket, return complete messages.
+
+        Raises ValueError if an in-flight frame exceeds the size cap.
+        """
         self._buffer += data
+        if len(self._buffer) > self._max_frame_size:
+            raise ValueError(
+                f"IPC frame exceeded max size of {self._max_frame_size} bytes"
+            )
         messages: list[IpcMessage] = []
         while b"\n" in self._buffer:
             line, self._buffer = self._buffer.split(b"\n", 1)

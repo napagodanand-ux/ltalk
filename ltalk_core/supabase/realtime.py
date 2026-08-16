@@ -53,6 +53,7 @@ class SupabaseRealtime:
         self._channels: dict[str, RealtimeChannel] = {}
         self._running = False
         self._heartbeat_task: Optional[asyncio.Task] = None
+        self._connect_task: Optional[asyncio.Task] = None
         self._receive_task: Optional[asyncio.Task] = None
         self._ref_counter = 0
         self._pending_acks: dict[str, asyncio.Event] = {}
@@ -76,7 +77,8 @@ class SupabaseRealtime:
         if self._running:
             return
         self._running = True
-        asyncio.create_task(self._connect_loop())
+        self._connect_task = asyncio.create_task(self._connect_loop())
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
     async def _connect_loop(self) -> None:
         """Reconnection loop."""
@@ -154,6 +156,19 @@ class SupabaseRealtime:
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON from realtime")
 
+    async def _heartbeat_loop(self) -> None:
+        """Send periodic Phoenix heartbeats to keep the connection alive."""
+        while self._running:
+            await asyncio.sleep(HEARTBEAT_INTERVAL)
+            ws = self._ws
+            if ws is None or not ws.open:
+                continue
+            ref = self._next_ref()
+            try:
+                await ws.send(json.dumps([ref, "phoenix", "phx_heartbeat", {}]))
+            except (ConnectionClosed, OSError):
+                logger.debug("Heartbeat failed, connection will be re-established")
+
     async def _handle_message(self, msg: dict) -> None:
         """Route an incoming Phoenix message."""
         msg_type = msg.get("event")
@@ -201,7 +216,6 @@ class SupabaseRealtime:
                     }
                 ],
             },
-            "topic": channel.topic,
         }
 
         msg = [ref, channel.topic, "phx_join", join_payload]
@@ -253,6 +267,12 @@ class SupabaseRealtime:
     def stop(self) -> None:
         """Stop the realtime connection (sync)."""
         self._running = False
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            self._heartbeat_task = None
+        if self._connect_task:
+            self._connect_task.cancel()
+            self._connect_task = None
         if self._ws:
             try:
                 # Close the underlying transport directly (close() is async)
@@ -269,6 +289,20 @@ class SupabaseRealtime:
     async def disconnect(self) -> None:
         """Stop the realtime connection (async)."""
         self._running = False
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
+        if self._connect_task:
+            self._connect_task.cancel()
+            try:
+                await self._connect_task
+            except asyncio.CancelledError:
+                pass
+            self._connect_task = None
         if self._ws:
             try:
                 await self._ws.close()

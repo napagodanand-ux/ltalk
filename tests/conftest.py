@@ -9,6 +9,9 @@ from typing import Generator
 
 import pytest
 
+os.environ.setdefault("LTALK_ALLOW_PLAINTEXT_DB", "1")
+os.environ.setdefault("LTALK_ALLOW_FALLBACK_CRYPTO", "1")
+
 from ltalk_core.crypto.encrypt import MessageEncryptor
 from ltalk_core.crypto.key_store import KeyStore
 from ltalk_core.crypto.session_cache import SessionCache

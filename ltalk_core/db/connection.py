@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Optional
@@ -16,12 +17,14 @@ except ImportError:
     _HAS_SQLCIPHER = False
 
 
+logger = logging.getLogger(__name__)
+
 _DEFAULT_DB_DIR = Path.home() / ".local" / "share" / "ltalk"
 _DEFAULT_DB_NAME = "ltalk.db"
 
 
 class Database:
-    """Encrypted SQLite database using SQLCipher (falls back to sqlite3)."""
+    """Encrypted SQLite database using SQLCipher (fails closed if unavailable)."""
 
     def __init__(
         self,
@@ -45,7 +48,23 @@ class Database:
         return key_bytes.hex()
 
     def connect(self) -> None:
-        """Open the database connection."""
+        """Open the database connection.
+
+        Raises RuntimeError if encrypted storage (pysqlcipher3) is unavailable
+        unless LTALK_ALLOW_PLAINTEXT_DB=1 is set for development/testing only.
+        """
+        if not _HAS_SQLCIPHER:
+            if os.environ.get("LTALK_ALLOW_PLAINTEXT_DB") != "1":
+                raise RuntimeError(
+                    "pysqlcipher3 (SQLCipher) is not installed. LTalk requires an "
+                    "encrypted local database. Install pysqlcipher3 or set "
+                    "LTALK_ALLOW_PLAINTEXT_DB=1 for development/testing only "
+                    "(never in production)."
+                )
+            logger.warning(
+                "Running with PLAINTEXT database — NEVER use in production"
+            )
+
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite.connect(str(self._db_path))
         if _HAS_SQLCIPHER:

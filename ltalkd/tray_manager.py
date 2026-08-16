@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import sys
 from typing import Any, Optional
 
@@ -92,17 +93,23 @@ class TrayManager:
 
     def _open_app(self) -> None:
         """Open the main LTalk window."""
-        try:
-            os.system("ltalk &")
-        except Exception:
-            pass
+        self._launch_app()
 
     def _new_chat(self) -> None:
         """Open LTalk and focus new chat."""
+        self._launch_app()
+
+    def _launch_app(self) -> None:
+        """Launch the GUI in a detached process (no shell)."""
         try:
-            os.system("ltalk &")
-        except Exception:
-            pass
+            subprocess.Popen(
+                ["ltalk"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            logger.warning("Failed to launch LTalk: %s", e)
 
     def _mark_all_read(self) -> None:
         """Mark all messages as read."""

@@ -47,6 +47,7 @@ CREATE TABLE public.chats (
   group_name TEXT,
   group_avatar_url TEXT,
   group_admin_id UUID REFERENCES public.profiles(id),
+  created_by UUID REFERENCES public.profiles(id),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -157,23 +158,51 @@ CREATE POLICY "chats_select" ON public.chats FOR SELECT
 CREATE POLICY "chats_insert" ON public.chats FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "chats_update" ON public.chats FOR UPDATE
   USING (id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid()));
+-- Only the chat creator (or the admin of a group) may delete a chat
+CREATE POLICY "chats_delete" ON public.chats FOR DELETE
+  USING (created_by = auth.uid() OR (is_group AND group_admin_id = auth.uid()));
 
 ALTER TABLE public.chat_members ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "chat_members_select" ON public.chat_members FOR SELECT
   USING (chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid()));
-CREATE POLICY "chat_members_insert" ON public.chat_members FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+-- Members can only be added by the chat creator or a group admin; no self-join
+CREATE POLICY "chat_members_insert" ON public.chat_members FOR INSERT WITH CHECK (
+  chat_id IN (SELECT id FROM chats WHERE created_by = auth.uid() OR (is_group AND group_admin_id = auth.uid()))
+);
+-- Leave a chat yourself, or be removed by the creator/group admin
+CREATE POLICY "chat_members_delete" ON public.chat_members FOR DELETE
+  USING (
+    user_id = auth.uid()
+    OR chat_id IN (SELECT id FROM chats WHERE created_by = auth.uid() OR (is_group AND group_admin_id = auth.uid()))
+  );
 
 -- Message policies: users can only access messages in chats they are members of
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "messages_select" ON public.messages FOR SELECT
   USING (chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid()));
-CREATE POLICY "messages_insert" ON public.messages FOR INSERT WITH CHECK (sender_id = auth.uid());
-CREATE POLICY "messages_update" ON public.messages FOR UPDATE USING (sender_id = auth.uid());
+CREATE POLICY "messages_insert" ON public.messages FOR INSERT WITH CHECK (
+  sender_id = auth.uid()
+  AND chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid())
+);
+CREATE POLICY "messages_update" ON public.messages FOR UPDATE USING (
+  sender_id = auth.uid()
+  AND chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid())
+);
 
+-- Message status is chat-scoped, not globally readable
 ALTER TABLE public.message_status ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "message_status_select" ON public.message_status FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "message_status_insert" ON public.message_status FOR INSERT WITH CHECK (user_id = auth.uid());
-CREATE POLICY "message_status_update" ON public.message_status FOR UPDATE USING (user_id = auth.uid());
+CREATE POLICY "message_status_select" ON public.message_status FOR SELECT
+  USING (chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid()));
+CREATE POLICY "message_status_insert" ON public.message_status FOR INSERT WITH CHECK (
+  user_id = auth.uid()
+  AND chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid())
+);
+CREATE POLICY "message_status_update" ON public.message_status FOR UPDATE USING (
+  user_id = auth.uid()
+  AND chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid())
+);
+CREATE POLICY "message_status_delete" ON public.message_status FOR DELETE
+  USING (user_id = auth.uid());
 
 ALTER TABLE public.statuses ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "statuses_select" ON public.statuses FOR SELECT USING (
@@ -189,8 +218,14 @@ CREATE POLICY "status_views_select" ON public.status_views FOR SELECT USING (aut
 CREATE POLICY "status_views_insert" ON public.status_views FOR INSERT WITH CHECK (auth.uid() = viewer_id);
 
 ALTER TABLE public.calls ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "calls_select" ON public.calls FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "calls_insert" ON public.calls FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "calls_select" ON public.calls FOR SELECT
+  USING (chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid()));
+CREATE POLICY "calls_insert" ON public.calls FOR INSERT WITH CHECK (
+  caller_id = auth.uid()
+  AND chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid())
+);
+CREATE POLICY "calls_delete" ON public.calls FOR DELETE
+  USING (chat_id IN (SELECT chat_id FROM chat_members WHERE user_id = auth.uid()));
 
 ALTER TABLE public.blocked_users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "blocked_users_select" ON public.blocked_users FOR SELECT USING (auth.uid() = blocker_id);
@@ -207,3 +242,59 @@ CREATE INDEX idx_messages_chat_time ON public.messages(chat_id, created_at);
 CREATE INDEX idx_messages_sender ON public.messages(sender_id);
 CREATE INDEX idx_chat_members_user ON public.chat_members(user_id);
 CREATE INDEX idx_profiles_display_name ON public.profiles(display_name);
+
+-- Last-seen is maintained server-side so clients only send online/offline state
+CREATE OR REPLACE FUNCTION public.touch_last_seen()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.last_seen = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_profiles_touch_last_seen
+BEFORE UPDATE OF online ON public.profiles
+FOR EACH ROW
+EXECUTE FUNCTION public.touch_last_seen();
+
+-- ============================================
+-- Chat summaries: one query for the whole chat list
+-- ============================================
+-- security_invoker makes the view run with the caller's RLS, so
+-- the member-scoped chats/messages/chat_members policies apply.
+-- Timestamps are returned as epoch seconds (bigint) so clients can
+-- store them without ISO-8601 parsing.
+CREATE OR REPLACE VIEW public.chat_summaries AS
+SELECT
+  c.id,
+  c.is_group,
+  c.group_name,
+  c.group_avatar_url,
+  c.group_admin_id,
+  c.created_by,
+  extract(epoch FROM c.created_at)::bigint AS created_at,
+  extract(epoch FROM c.updated_at)::bigint AS updated_at,
+  COALESCE(
+    (SELECT extract(epoch FROM max(m.created_at))::bigint
+       FROM public.messages m WHERE m.chat_id = c.id),
+    extract(epoch FROM c.created_at)::bigint
+  ) AS last_message_at,
+  (SELECT m.encrypted_content FROM public.messages m
+    WHERE m.chat_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_preview,
+  COALESCE((
+    SELECT jsonb_agg(
+      jsonb_build_object(
+        'user_id', cm.user_id,
+        'display_name', p.display_name,
+        'avatar_url', p.avatar_url,
+        'role', cm.role,
+        'joined_at', extract(epoch FROM cm.joined_at)::bigint
+      ) ORDER BY cm.joined_at
+    )
+    FROM public.chat_members cm
+    LEFT JOIN public.profiles p ON p.id = cm.user_id
+    WHERE cm.chat_id = c.id
+  ), '[]'::jsonb) AS members
+FROM public.chats c;
+
+ALTER VIEW public.chat_summaries SET (security_invoker = true);

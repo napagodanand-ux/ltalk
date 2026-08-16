@@ -59,11 +59,6 @@ class TestIpcMessage:
         assert msg.data["message"] == "Something went wrong"
         assert msg.request_id == "req-1"
 
-    def test_auth_token_refresh(self):
-        msg = IpcMessage.auth_token_refresh("jwt-123", "refresh-456", 9999999999.0)
-        assert msg.type == IpcMessageType.AUTH_TOKEN_REFRESH
-        assert msg.data["jwt"] == "jwt-123"
-
     def test_empty_message_raises(self):
         try:
             IpcMessage.deserialize(b"\n")
@@ -103,6 +98,19 @@ class TestIpcProtocol:
         # Feed second half
         messages = protocol.feed(raw[len(raw)//2:])
         assert len(messages) == 1
+
+    def test_feed_oversized_frame_raises(self):
+        protocol = IpcProtocol(max_frame_size=100)
+        big = b"x" * 200
+        try:
+            protocol.feed(big)
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+    def test_default_frame_cap(self):
+        protocol = IpcProtocol()
+        assert protocol._max_frame_size == IpcProtocol.DEFAULT_MAX_FRAME_SIZE
 
     def test_reset(self):
         protocol = IpcProtocol()

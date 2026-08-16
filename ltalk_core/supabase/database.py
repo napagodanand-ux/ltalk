@@ -10,8 +10,38 @@ from .client import SupabaseClient
 class SupabaseDatabase:
     """Handles Supabase database CRUD via PostgREST."""
 
+    POSTGREST_OPERATORS = frozenset({
+        "eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", "in", "is",
+        "isnot", "contains", "containedby", "overlaps", "not", "match",
+        "imatch", "fts", "plfts", "phfts", "wfts", "cs", "cd", "ov",
+        "sl", "sr", "nxr", "nxl", "adj", "or", "and",
+    })
+
     def __init__(self, client: SupabaseClient) -> None:
         self.client = client
+
+    @staticmethod
+    def _prepare_param(key: str, value: Any) -> str:
+        """Build a PostgREST filter param from a bare value or an already-prefixed one."""
+        if isinstance(value, bool):
+            return "eq.true" if value else "eq.false"
+        if isinstance(value, (int, float)):
+            return f"eq.{value}"
+        if isinstance(value, str):
+            op, dot, _ = value.partition(".")
+            if dot and op.lower() in SupabaseDatabase.POSTGREST_OPERATORS:
+                return value
+            return f"eq.{value}"
+        return f"eq.{value}"
+
+    @staticmethod
+    def _build_filters(filters: Optional[dict[str, Any]]) -> dict[str, str]:
+        if not filters:
+            return {}
+        return {
+            key: SupabaseDatabase._prepare_param(key, value)
+            for key, value in filters.items()
+        }
 
     async def select(
         self,
@@ -25,14 +55,7 @@ class SupabaseDatabase:
     ) -> list[dict]:
         """Query rows from a table."""
         params: dict[str, str] = {"select": columns}
-        if filters:
-            for key, value in filters.items():
-                if isinstance(value, bool):
-                    params[key] = f"eq.{'true' if value else 'false'}"
-                elif isinstance(value, (int, float)):
-                    params[key] = f"eq.{value}"
-                else:
-                    params[key] = f"eq.{value}"
+        params.update(self._build_filters(filters))
         if order:
             direction = ".asc" if ascending else ".desc"
             params["order"] = f"{order}{direction}"
@@ -71,12 +94,7 @@ class SupabaseDatabase:
         self, table: str, data: dict, filters: dict[str, Any]
     ) -> list[dict]:
         """Update rows matching filters."""
-        params: dict[str, str] = {}
-        for key, value in filters.items():
-            if isinstance(value, bool):
-                params[key] = f"eq.{'true' if value else 'false'}"
-            else:
-                params[key] = f"eq.{value}"
+        params = self._build_filters(filters)
 
         response = await self.client.http.patch(
             f"/rest/v1/{table}",
@@ -92,12 +110,7 @@ class SupabaseDatabase:
 
     async def delete(self, table: str, filters: dict[str, Any]) -> None:
         """Delete rows matching filters."""
-        params: dict[str, str] = {}
-        for key, value in filters.items():
-            if isinstance(value, bool):
-                params[key] = f"eq.{'true' if value else 'false'}"
-            else:
-                params[key] = f"eq.{value}"
+        params = self._build_filters(filters)
 
         response = await self.client.http.delete(
             f"/rest/v1/{table}",

@@ -19,6 +19,8 @@ class OfflineQueue:
         chat_id: str,
         encrypted_content: str,
         message_type: str,
+        message_id: str,
+        sender_id: str,
         metadata_json: str = "{}",
         reply_to: Optional[str] = None,
     ) -> int:
@@ -26,10 +28,20 @@ class OfflineQueue:
         cursor = self.db.execute(
             """
             INSERT INTO offline_queue
-            (chat_id, encrypted_content, message_type, metadata_json, reply_to, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (chat_id, encrypted_content, message_type, message_id, sender_id,
+             metadata_json, reply_to, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (chat_id, encrypted_content, message_type, metadata_json, reply_to, int(time.time())),
+            (
+                chat_id,
+                encrypted_content,
+                message_type,
+                message_id,
+                sender_id,
+                metadata_json,
+                reply_to,
+                int(time.time()),
+            ),
         )
         self.db.commit()
         return cursor.lastrowid

@@ -37,7 +37,10 @@ class ChatController:
         self, current_user_id: str, other_user_id: str
     ) -> str:
         """Create a direct chat. Returns chat_id."""
-        chat_data = await self._database.insert("chats", {"is_group": False})
+        chat_data = await self._database.insert("chats", {
+            "is_group": False,
+            "created_by": current_user_id,
+        })
         chat_id = chat_data[0]["id"]
 
         await self._database.insert("chat_members", [
@@ -78,6 +81,7 @@ class ChatController:
             "is_group": True,
             "group_name": name,
             "group_admin_id": current_user_id,
+            "created_by": current_user_id,
         })
         chat_id = chat_data[0]["id"]
 

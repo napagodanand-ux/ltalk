@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -68,9 +69,10 @@ class QueueProcessor:
             try:
                 await db.insert("messages", {
                     "chat_id": entry["chat_id"],
-                    "encrypted_content": entry["encrypted_content"],
+                    "sender_id": entry["sender_id"],
                     "message_type": entry["message_type"],
-                    "metadata": entry.get("metadata_json", "{}"),
+                    "encrypted_content": entry["encrypted_content"],
+                    "metadata": json.loads(entry.get("metadata_json") or "{}"),
                     "reply_to": entry.get("reply_to"),
                 })
                 self._queue.mark_sent(entry["id"])

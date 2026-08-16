@@ -209,17 +209,23 @@ class TestOfflineQueue:
     def test_enqueue_and_dequeue(self, tmp_path):
         db = self._setup_db(tmp_path)
         queue = OfflineQueue(db)
-        queue_id = queue.enqueue("chat-1", "encrypted-data", "text")
+        queue_id = queue.enqueue(
+            "chat-1", "encrypted-data", "text", "msg-1", "user-1"
+        )
         assert queue_id > 0
         pending = queue.dequeue()
         assert len(pending) == 1
         assert pending[0]["chat_id"] == "chat-1"
+        assert pending[0]["message_id"] == "msg-1"
+        assert pending[0]["sender_id"] == "user-1"
         db.close()
 
     def test_mark_sent(self, tmp_path):
         db = self._setup_db(tmp_path)
         queue = OfflineQueue(db)
-        queue_id = queue.enqueue("chat-1", "encrypted-data", "text")
+        queue_id = queue.enqueue(
+            "chat-1", "encrypted-data", "text", "msg-1", "user-1"
+        )
         queue.mark_sent(queue_id)
         pending = queue.dequeue()
         assert len(pending) == 0
@@ -228,7 +234,9 @@ class TestOfflineQueue:
     def test_mark_failed_increments_retry(self, tmp_path):
         db = self._setup_db(tmp_path)
         queue = OfflineQueue(db)
-        queue_id = queue.enqueue("chat-1", "encrypted-data", "text")
+        queue_id = queue.enqueue(
+            "chat-1", "encrypted-data", "text", "msg-1", "user-1"
+        )
         queue.mark_failed(queue_id)
         pending = queue.dequeue()
         assert len(pending) == 1

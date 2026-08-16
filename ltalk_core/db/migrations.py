@@ -171,11 +171,16 @@ MIGRATIONS: list[str] = [
         applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
     );
     """,
+    # Migration 002: Offline queue send metadata for reliable delivery
+    """
+    ALTER TABLE offline_queue ADD COLUMN message_id TEXT;
+    ALTER TABLE offline_queue ADD COLUMN sender_id TEXT;
+    """,
 ]
 
 
 def run_migrations(db: Database) -> None:
-    """Apply all pending database migrations."""
+    """Apply all pending database migrations (append-only, versioned)."""
     current_version = db.get_schema_version()
 
     for i, migration_sql in enumerate(MIGRATIONS, start=1):
@@ -187,16 +192,3 @@ def run_migrations(db: Database) -> None:
             except Exception:
                 db.rollback()
                 raise
-
-    # Migration 002: Add refresh_token column if missing (for existing installs)
-    if current_version < 2:
-        try:
-            db.execute("ALTER TABLE local_user ADD COLUMN refresh_token TEXT NOT NULL DEFAULT ''")
-            db.set_schema_version(2)
-            db.commit()
-        except Exception:
-            # Column already exists (OperationalError) or other error, skip
-            db.rollback()
-            if current_version == 0:
-                db.set_schema_version(2)
-                db.commit()

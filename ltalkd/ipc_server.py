@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
+import struct
 from pathlib import Path
 from typing import Any, Optional
 
@@ -13,6 +15,21 @@ from ltalk_core.ipc.protocol import IpcMessage, IpcMessageType, IpcProtocol
 logger = logging.getLogger(__name__)
 
 SOCK_PATH = f"/tmp/ltalk-{os.getuid()}.sock"
+
+
+def _get_peer_uid(writer: asyncio.StreamWriter) -> Optional[int]:
+    """Resolve the peer process uid via SO_PEERCRED (Linux)."""
+    sock = writer.get_extra_info("socket")
+    if sock is None:
+        return None
+    try:
+        cred = sock.getsockopt(
+            socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")
+        )
+        _pid, uid, _gid = struct.unpack("3i", cred)
+        return int(uid)
+    except (OSError, ValueError):
+        return None
 
 
 class IpcServer:
@@ -58,9 +75,20 @@ class IpcServer:
         writer: asyncio.StreamWriter,
     ) -> None:
         """Handle a new GUI client connection."""
+        # Peer auth: refuse connections from other processes (fail closed).
+        peer_uid = _get_peer_uid(writer)
+        if peer_uid != os.getuid():
+            logger.warning(
+                "Rejected IPC connection from uid=%s (expected uid=%s)",
+                peer_uid,
+                os.getuid(),
+            )
+            writer.close()
+            return
+
         protocol = IpcProtocol()
         self._clients[writer] = protocol
-        logger.info("GUI client connected")
+        logger.info("GUI client connected (uid=%s)", peer_uid)
 
         try:
             while True:
@@ -68,7 +96,11 @@ class IpcServer:
                 if not data:
                     break
 
-                messages = protocol.feed(data)
+                try:
+                    messages = protocol.feed(data)
+                except ValueError as e:
+                    logger.warning("Bad IPC frame from client: %s", e)
+                    break
                 for msg in messages:
                     await self._process_message(msg, writer)
         except (ConnectionResetError, asyncio.CancelledError, OSError):
@@ -105,10 +137,10 @@ class IpcServer:
             await self._handle_mark_read(msg)
 
         elif msg.type == IpcMessageType.TYPING_START:
-            await self._handle_typing(msg, True)
+            await self._handle_typing(msg, writer, True)
 
         elif msg.type == IpcMessageType.TYPING_STOP:
-            await self._handle_typing(msg, False)
+            await self._handle_typing(msg, writer, False)
 
         elif msg.type == IpcMessageType.SHUTDOWN_DAEMON:
             logger.info("Shutdown requested from GUI")
@@ -143,8 +175,7 @@ class IpcServer:
                 db = SupabaseDatabase(self._daemon._supabase)
                 await db.update("profiles", {
                     "online": data.get("status") == "online",
-                    "last_seen": "now()",
-                }, {"id": f"eq.{data.get('user_id', '')}"})
+                }, {"id": data.get("user_id", "")})
         except Exception as e:
             logger.error("Failed to update presence: %s", e)
 
@@ -158,10 +189,23 @@ class IpcServer:
             )
             self._daemon._db.commit()
 
-    async def _handle_typing(self, msg: IpcMessage, is_typing: bool) -> None:
-        """Handle typing indicator."""
-        # In production, broadcast via Realtime channel
-        pass
+    async def _handle_typing(self, msg: IpcMessage, original_writer: asyncio.StreamWriter, is_typing: bool) -> None:
+        """Forward typing indicators to other connected GUI clients."""
+        data = msg.data
+        typing_msg = IpcMessage.typing_indicator(
+            chat_id=data.get("chat_id", ""),
+            user_id=data.get("user_id", ""),
+            is_typing=is_typing,
+        )
+        payload = typing_msg.serialize()
+        for writer in list(self._clients.keys()):
+            if writer is original_writer:
+                continue
+            try:
+                writer.write(payload)
+                await writer.drain()
+            except (OSError, ConnectionError):
+                self._clients.pop(writer, None)
 
     async def broadcast_to_gui(self, message: IpcMessage) -> None:
         """Send a message to all connected GUI clients."""
