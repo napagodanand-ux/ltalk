@@ -13,10 +13,7 @@
   extraResources: [],
   win: {
     target: ['nsis'],
-    icon: 'assets/icons/icon.ico',
-    publisherName: 'LTalk',
-    signingHashAlgorithms: ['sha256'],
-    timeStampServer: 'http://timestamp.digicert.com'
+    icon: 'assets/icons/icon.ico'
   },
   linux: {
     target: ['AppImage', 'deb'],
