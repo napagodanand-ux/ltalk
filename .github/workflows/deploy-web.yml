@@ -6,6 +6,19 @@ name: Deploy Web
 on:
   push:
     branches: [main]
+    # Only rebuild the web client when something it actually depends on changes.
+    # Pure version bumps (package.json/lock) or docs/schema edits don't need a
+    # fresh Pages deployment.
+    paths:
+      - 'src/renderer/**'
+      - 'src/shared/**'
+      - 'src/preload/**'
+      - 'index.html'
+      - 'vite.web.config.ts'
+      - 'tailwind.config.*'
+      - 'postcss.config.*'
+      - 'package.json'
+      - '.github/workflows/deploy-web.yml'
   workflow_dispatch:
 
 permissions:
@@ -13,9 +26,12 @@ permissions:
   pages: write
   id-token: write
 
+# Run deploys serially to completion. `cancel-in-progress: true` caused rapid
+# successive pushes (e.g. many version bumps) to perpetually abort the in-flight
+# Pages deployment, leaving it stuck in a queued state.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
