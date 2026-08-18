@@ -1,0 +1,40 @@
+{
+  appId: 'com.ltalk.app',
+  productName: 'LTalk',
+  copyright: 'Copyright © 2024 LTalk',
+  directories: {
+    output: 'release',
+    buildResources: 'assets'
+  },
+  files: [
+    'out/**/*',
+    '!out/**/*.map'
+  ],
+  extraResources: [],
+  win: {
+    target: ['nsis'],
+    icon: 'assets/icons/icon.ico',
+    publisherName: 'LTalk'
+  },
+  linux: {
+    target: ['AppImage', 'deb'],
+    icon: 'assets/icons',
+    category: 'Network',
+    synopsis: 'Secure desktop messaging',
+    maintainer: 'LTalk',
+    description: 'End-to-end encrypted desktop messaging'
+  },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true
+  },
+  publish: {
+    provider: 'github',
+    owner: 'napagodanand-ux',
+    repo: 'ltalk',
+    releaseType: 'release'
+  }
+}

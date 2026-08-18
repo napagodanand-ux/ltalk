@@ -1,0 +1,48 @@
+name: Release
+
+# Builds LTalk for Windows + Linux and publishes a GitHub release that the
+# in-app auto-updater (electron-updater) can consume. Each pushed `v*` tag is
+# a new version; the desktop app version is bumped via `npm run release:*`.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Linux packaging dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm
+
+      # Supabase anon config is safe to expose client-side; injected as a
+      # build-time .env from repository variables (never committed).
+      - name: Write build-time env
+        shell: bash
+        run: printf 'VITE_SUPABASE_URL=%s\nVITE_SUPABASE_ANON_KEY=%s\n' "${{ vars.VITE_SUPABASE_URL }}" "${{ vars.VITE_SUPABASE_ANON_KEY }}" > .env
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify (lint, typecheck, test)
+        run: npm run lint && npm run typecheck && npm run test
+
+      - name: Build & publish
+        run: npm run dist -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

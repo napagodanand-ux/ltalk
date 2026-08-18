@@ -1,1 +1,0 @@
-"""LTalk GUI Application."""

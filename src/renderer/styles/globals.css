@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    background-color: var(--lt-bg);
+    color: var(--lt-text);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--lt-scrollbar);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--lt-text-muted);
+  }
+}
+
+@layer components {
+  .lt-panel {
+    background-color: var(--lt-surface);
+    border-right: 1px solid var(--lt-border);
+  }
+
+  .lt-input {
+    background-color: var(--lt-bg-secondary);
+    border: 1px solid var(--lt-border);
+    color: var(--lt-text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .lt-input:focus {
+    border-color: var(--lt-primary);
+  }
+
+  .lt-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+  }
+
+  .lt-button-primary {
+    background-color: var(--lt-primary);
+    color: #ffffff;
+  }
+
+  .lt-button-primary:hover {
+    background-color: var(--lt-primary-hover);
+  }
+
+  .lt-button-primary:active {
+    background-color: var(--lt-primary-active);
+  }
+
+  .lt-button-ghost {
+    background-color: transparent;
+    color: var(--lt-text-secondary);
+  }
+
+  .lt-button-ghost:hover {
+    background-color: var(--lt-surface-hover);
+    color: var(--lt-text);
+  }
+}
