@@ -1,6 +1,6 @@
 {
   "name": "ltalk",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "LTalk — secure desktop messaging (Electron + React + TypeScript + Supabase)",
   "author": "LTalk",
   "repository": {
