@@ -54,6 +54,18 @@ async function getGroupKey(conversationId: string): Promise<CryptoKey> {
   return key;
 }
 
+// Forces a re-read of this conversation's sealed key from the database. Called
+// when a group key is rotated (member removed/added) so the cache picks up the
+// new key before the next decrypt.
+export async function refreshGroupKey(conversationId: string): Promise<void> {
+  groupKeyCache.delete(conversationId);
+  try {
+    await getGroupKey(conversationId);
+  } catch {
+    /* no key available (e.g. removed from the group) */
+  }
+}
+
 // Decrypt a message using the COUNTERPARTY's public key (the other participant
 // in the 1:1 conversation). For a sent message the counterparty is the recipient,
 // for a received message it is the sender. Using message.sender_id's key directly
@@ -76,7 +88,16 @@ async function decryptIfNeeded(message: Message): Promise<Message> {
       const plain = await aesDecrypt(message.content, key);
       return { ...message, content: plain };
     } catch {
-      return { ...message, content: '🔒 Encrypted message' };
+      // The group key may have just rotated; refresh once and retry before
+      // giving up, so messages re-encrypted under the new key still decrypt.
+      try {
+        await refreshGroupKey(message.conversation_id);
+        const key = await getGroupKey(message.conversation_id);
+        const plain = await aesDecrypt(message.content, key);
+        return { ...message, content: plain };
+      } catch {
+        return { ...message, content: '🔒 Encrypted message' };
+      }
     }
   }
 

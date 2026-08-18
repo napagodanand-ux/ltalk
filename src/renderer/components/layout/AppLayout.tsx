@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabase';
 import type { Profile, Reaction } from '../../../src/shared/types';
 import { useUiStore } from '../../stores/uiStore';
 import { useConversationStore } from '../../stores/conversationStore';
-import { useMessageStore } from '../../stores/messageStore';
+import { useMessageStore, refreshGroupKey } from '../../stores/messageStore';
 import { useFriendStore } from '../../stores/friendStore';
 import { useAuthStore } from '../../stores/authStore';
 import { updatePresence } from '../../lib/api/profile';
@@ -284,11 +284,31 @@ export function AppLayout() {
       )
       .subscribe();
 
+    // Group-key changes (rotation on member removal/addition). Remaining members
+    // refresh their cached key and re-decrypt the open conversation so history
+    // stays readable after the key changes.
+    const keysChannel = supabase
+      .channel('realtime:groupkeys')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversation_keys' },
+        (payload) => {
+          const row = ((payload.new ?? payload.old) || {}) as { conversation_id?: string };
+          const cid = row.conversation_id;
+          if (!cid) return;
+          void refreshGroupKey(cid);
+          const activeId = useConversationStore.getState().activeId;
+          if (activeId === cid) void useMessageStore.getState().load(cid);
+        }
+      )
+      .subscribe();
+
     return () => {
       messageUnsub();
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(deletionsChannel);
       supabase.removeChannel(reactionsChannel);
+      supabase.removeChannel(keysChannel);
     };
   }, []);
 

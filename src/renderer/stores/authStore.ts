@@ -50,7 +50,9 @@ function publicMatches(privateJwk: JsonWebKey, publicB64: string | null): boolea
 async function bootstrapKeys(profile: Profile, password?: string): Promise<{ needsRestore: boolean }> {
   const cipher = profile.key_backup_cipher;
   const salt = profile.key_backup_salt;
+  const hasBackup = Boolean(cipher && salt);
 
+  // 1) Reuse the locally stored key when it matches the canonical public key.
   const stored = await window.electron.secure.getKey('privateKey');
   if (stored) {
     try {
@@ -64,7 +66,12 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
     }
   }
 
-  if (cipher && salt && password) {
+  // 2) Recover from the password-encrypted backup. Critically: if a backup
+  //    exists but it fails to restore (wrong password, corrupt, or no longer
+  //    matches the registered public key) we must NEVER regenerate and
+  //    overwrite the canonical public key — that would orphan every existing
+  //    conversation and make them all unreadable ("🔒 Encrypted message").
+  if (hasBackup && password) {
     try {
       const priv = await decryptKeyBackup(cipher, salt, password);
       if (publicMatches(priv, profile.public_key)) {
@@ -73,34 +80,31 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
         return { needsRestore: false };
       }
     } catch {
-      /* wrong password or corrupt backup — fall through */
+      /* fall through */
     }
-  }
-
-  if (password) {
-    const pair = await generateKeyPair();
-    setPrivateKey(pair.privateKeyJwk);
-    await window.electron.secure.storeKey('privateKey', encodeKey(pair.privateKeyJwk));
-    const backup = await encryptKeyBackup(pair.privateKeyJwk, password);
-    await updateProfile(profile.id, {
-      public_key: encodeKey(pair.publicKeyJwk),
-      key_backup_cipher: backup.cipher,
-      key_backup_salt: backup.salt
-    });
-    return { needsRestore: false };
-  }
-
-  if (cipher && salt) {
     return { needsRestore: true };
   }
 
-  // Legacy account with no backup: fall back to a device-local key and
-  // publish its public key (original single-device behaviour).
-  const pair = await generateKeyPair();
-  setPrivateKey(pair.privateKeyJwk);
-  await window.electron.secure.storeKey('privateKey', encodeKey(pair.privateKeyJwk));
-  await updateProfile(profile.id, { public_key: encodeKey(pair.publicKeyJwk) });
-  return { needsRestore: false };
+  // 3) No backup yet: brand-new or legacy account. Generate a fresh key and
+  //    publish its public key (original single-device behaviour). We only ever
+  //    overwrite the public key here, where no prior key/backup exists.
+  if (!hasBackup) {
+    const pair = await generateKeyPair();
+    setPrivateKey(pair.privateKeyJwk);
+    await window.electron.secure.storeKey('privateKey', encodeKey(pair.privateKeyJwk));
+    const updates: Partial<Profile> = { public_key: encodeKey(pair.publicKeyJwk) };
+    if (password) {
+      const backup = await encryptKeyBackup(pair.privateKeyJwk, password);
+      updates.key_backup_cipher = backup.cipher;
+      updates.key_backup_salt = backup.salt;
+    }
+    await updateProfile(profile.id, updates);
+    return { needsRestore: false };
+  }
+
+  // 4) Backup present but no password supplied yet (session restore on a new
+  //    device) — ask the UI to prompt for the password.
+  return { needsRestore: true };
 }
 
 export const useAuthStore = create<AuthState>((set) => ({

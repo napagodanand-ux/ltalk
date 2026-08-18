@@ -20,8 +20,9 @@ The same client also runs as a web app (which updates live, so it is not version
 - **Presence & typing** — online / away / offline (a force-killed session shows offline after a short timeout) and live typing indicators.
 - **Media & voice** — images and files with upload progress/error reporting, plus voice messages with in-app playback.
 - **Rich messages** — edit, emoji reactions, replies, emoji picker, delete-for-me (per-account and idempotent) and delete-for-everyone, plus in-app message search (Ctrl+F).
-- **Group chats** — create groups from your friends with full E2EE and admin controls (rename, add/remove members, delete group); the creator is the group admin.
-- **Multi-device E2EE** — your encryption key is backed up (encrypted with your account password) and automatically restored when you sign in on another device, so your conversations stay readable everywhere.
+- **Group chats** — create groups from your friends with full E2EE and admin controls (rename, add/remove members, delete group); the creator is the group admin. Removing a member rotates the group key and re-encrypts history so a removed member can never read past or future messages.
+- **Friend-request gating** — you can only message a user once a friend request has been sent **and** accepted by both sides. Both the UI and server-side RLS enforce this, so a chat cannot be started until the request is accepted.
+- **Multi-device E2EE** — your encryption key is backed up (encrypted with your account password) and automatically restored when you sign in on another device, so your conversations stay readable everywhere. A failed key restore never overwrites your registered key, so existing conversations stay decryptable.
 - **Offline support** — a non-blocking banner appears when the connection drops; local content stays readable and everything re-syncs on reconnect.
 - **Automatic updates** — a launch splash checks for updates; optional updates can be skipped (the very next release then becomes required — a skip-cascade), while forced updates install immediately from GitHub Releases via `electron-updater`.
 - **Cross-platform notifications** — native Windows toasts + Linux notifications, with an in-app fallback.

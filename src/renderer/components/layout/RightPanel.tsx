@@ -107,6 +107,18 @@ export default function RightPanel() {
   const handleRemoveMember = async (userId: string) => {
     try {
       await removeMember(activeId, userId);
+      // Rotate the group key so the removed member can no longer decrypt new
+      // (or, after re-encryption, existing) messages. Remaining members pick
+      // up the new key via the realtime conversation_keys listener.
+      if (isAdmin) {
+        try {
+          await groupKeysApi.rotateGroupKey(activeId, userId);
+          await useMessageStore.getState().refreshGroupKey(activeId);
+          await useMessageStore.getState().load(activeId);
+        } catch {
+          showToast('Member removed (key rotation failed)');
+        }
+      }
       await useConversationStore.getState().load();
       showToast('Member removed');
     } catch {

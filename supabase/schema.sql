@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS conversation_keys (
 );
 
 ALTER TABLE conversation_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversation_keys REPLICA IDENTITY FULL;
 
 DROP POLICY IF EXISTS "Participants manage group keys" ON conversation_keys;
 CREATE POLICY "Participants manage group keys" ON conversation_keys FOR ALL
@@ -188,9 +189,26 @@ AS $$
   );
 $$;
 
+-- TRUE when the two users have an accepted friendship. Used to gate 1:1
+-- conversations and messages so that two people can only exchange messages
+-- after a friend request has been sent AND accepted by both sides.
+CREATE OR REPLACE FUNCTION friendship_accepted(a uuid, b uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM friendships f
+    WHERE f.status = 'accepted'
+      AND ((f.user_id = a AND f.friend_id = b) OR (f.user_id = b AND f.friend_id = a))
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION friendship_accepted(uuid, uuid) TO authenticated, anon;
+
 DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
 CREATE POLICY "Users can view their conversations" ON conversations FOR SELECT
-USING (is_participant(id));
+USING (is_participant(id) OR created_by = auth.uid());
 DROP POLICY IF EXISTS "Users can create conversations" ON conversations;
 CREATE POLICY "Users can create conversations" ON conversations FOR INSERT
 WITH CHECK (auth.uid() = created_by);
@@ -211,7 +229,14 @@ DROP POLICY IF EXISTS "Admins can add participants" ON conversation_participants
 CREATE POLICY "Admins can add participants" ON conversation_participants FOR ALL
 USING ((conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid()))
        OR is_participant(conversation_id))
-WITH CHECK (conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid()));
+WITH CHECK (
+  conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid())
+  AND (
+    user_id = auth.uid()
+    OR (SELECT is_group FROM conversations WHERE id = conversation_id)
+    OR friendship_accepted(auth.uid(), user_id)
+  )
+);
 DROP POLICY IF EXISTS "Users can remove members" ON conversation_participants;
 CREATE POLICY "Users can remove members" ON conversation_participants FOR DELETE
 USING (user_id = auth.uid()
@@ -223,10 +248,30 @@ USING (is_participant(messages.conversation_id));
 DROP POLICY IF EXISTS "Users can insert messages" ON messages;
 CREATE POLICY "Users can insert messages" ON messages FOR ALL
 USING ((sender_id = auth.uid()) AND is_participant(messages.conversation_id))
-WITH CHECK ((sender_id = auth.uid()) AND is_participant(messages.conversation_id));
+WITH CHECK ((sender_id = auth.uid()) AND is_participant(messages.conversation_id)
+  AND (
+    (SELECT is_group FROM conversations WHERE id = conversation_id)
+    OR EXISTS (
+      SELECT 1 FROM conversation_participants p
+      WHERE p.conversation_id = conversation_id
+        AND p.user_id <> auth.uid()
+        AND friendship_accepted(auth.uid(), p.user_id)
+    )
+  ));
 DROP POLICY IF EXISTS "Users can update own messages" ON messages;
 CREATE POLICY "Users can update own messages" ON messages FOR UPDATE
 USING (sender_id = auth.uid());
+
+-- Lets a group's creator re-key the conversation (rotate the symmetric group
+-- key on member removal) by re-encrypting existing messages with the new key.
+-- Restricted to groups the caller administers so non-admins cannot alter others'
+-- messages.
+DROP POLICY IF EXISTS "Admins can rekey group messages" ON messages;
+CREATE POLICY "Admins can rekey group messages" ON messages FOR UPDATE
+USING ((conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid()))
+       AND (SELECT is_group FROM conversations WHERE id = messages.conversation_id))
+WITH CHECK ((conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid()))
+       AND (SELECT is_group FROM conversations WHERE id = messages.conversation_id));
 
 DROP POLICY IF EXISTS "Participants can delete messages" ON messages;
 CREATE POLICY "Participants can delete messages" ON messages FOR DELETE
@@ -366,5 +411,11 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND tablename = 'reactions'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE reactions;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'conversation_keys'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE conversation_keys;
   END IF;
 END $$;
