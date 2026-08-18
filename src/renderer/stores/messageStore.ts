@@ -104,13 +104,26 @@ async function decryptIfNeeded(message: Message): Promise<Message> {
   const other = conversation?.participants.find((p) => p.id !== meId);
 
   let publicKey: JsonWebKey | null = other?.public_key ? safeParseKey(other.public_key) : null;
+  const pubSource = other?.public_key ? 'participant' : 'sender-fallback';
   if (!publicKey) publicKey = await getPublicKey(message.sender_id);
   if (!publicKey) return message;
 
   try {
     const plain = await decryptMessage(message.content, privateKey, publicKey);
     return { ...message, content: plain };
-  } catch {
+  } catch (e) {
+    // TEMP DIAGNOSTIC — remove after root-cause found.
+    console.error('[LTALK-DIAG] decryptIfNeeded failed', {
+      msgId: message.id,
+      convId: message.conversation_id,
+      isGroup: conversation?.is_group,
+      meId,
+      otherId: other?.id,
+      hasPrivateKey: !!privateKey,
+      pubSource,
+      hasPublicKey: !!publicKey,
+      err: (e as Error)?.message
+    });
     return { ...message, content: '🔒 Encrypted message' };
   }
 }
@@ -197,6 +210,15 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       if (other?.public_key) {
         const privateKey = getPrivateKey();
         const theirPublic = JSON.parse(atob(other.public_key)) as JsonWebKey;
+        // TEMP DIAGNOSTIC — remove after root-cause found.
+        console.error('[LTALK-DIAG] send 1:1', {
+          convId: conversationId,
+          meId: user.id,
+          otherId: other?.id,
+          hasPrivateKey: !!privateKey,
+          otherPubLen: other.public_key?.length,
+          otherPubHead: other.public_key?.slice(0, 24)
+        });
         if (privateKey) {
           content = await encryptMessage(text, privateKey, theirPublic);
           encrypted = true;
