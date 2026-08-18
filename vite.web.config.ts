@@ -14,6 +14,9 @@ const alias = [
 // browser fallback in src/renderer/lib/electronBridge.ts.
 export default defineConfig({
   root: path.join(root, 'src/renderer'),
+  // .env lives at the repo root; the renderer root is src/renderer, so point
+  // Vite's env resolution back at the repo root or Supabase config won't embed.
+  envDir: root,
   base: '/ltalk/',
   resolve: { alias },
   esbuild: {
