@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Minus, Square, X, Search, Sun, Moon, MessageSquarePlus } from 'lucide-react';
+import { Minus, Square, X, Search, Sun, Moon, MessageSquarePlus, UserPlus, Users } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { IconButton } from '../ui';
@@ -9,8 +9,13 @@ export function TitleBar() {
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
   const setNewConversationOpen = useUiStore((s) => s.setNewConversationOpen);
+  const setActivePanel = useUiStore((s) => s.setActivePanel);
 
   const isElectron = typeof window !== 'undefined' && window.electron?.isElectron === true;
+  const [menuOpen, setMenuOpen] = React.useState(false);
+
+  const chooserItem =
+    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-content hover:bg-surface-hover';
 
   return (
     <div className="flex h-10 shrink-0 items-center justify-between border-b border-edge bg-bg-secondary px-3">
@@ -32,10 +37,52 @@ export function TitleBar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        <IconButton label="New conversation" onClick={() => setNewConversationOpen(true)}>
-          <MessageSquarePlus size={16} />
-        </IconButton>
+      <div className="relative flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div className="relative">
+          <IconButton
+            label="New"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <MessageSquarePlus size={16} />
+          </IconButton>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-9 z-50 w-48 rounded-md border border-edge bg-surface p-1 shadow-panel">
+                <button
+                  type="button"
+                  className={chooserItem}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setNewConversationOpen(true, 'dm');
+                  }}
+                >
+                  <MessageSquarePlus size={14} /> New chat
+                </button>
+                <button
+                  type="button"
+                  className={chooserItem}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setNewConversationOpen(true, 'group');
+                  }}
+                >
+                  <Users size={14} /> New group
+                </button>
+                <button
+                  type="button"
+                  className={chooserItem}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setActivePanel('friends');
+                  }}
+                >
+                  <UserPlus size={14} /> Add friend
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <IconButton label={theme === 'dark' ? 'Light theme' : 'Dark theme'} onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </IconButton>

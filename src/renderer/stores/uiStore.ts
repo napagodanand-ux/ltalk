@@ -9,6 +9,7 @@ interface UiState {
   rightPanelOpen: boolean;
   searchOpen: boolean;
   newConversationOpen: boolean;
+  newConversationMode: 'dm' | 'group';
   activePanel: Panel;
   notifOnboarding: boolean;
   forwardContent: string | null;
@@ -28,7 +29,7 @@ interface UiState {
   toggleSidebar: () => void;
   setRightPanel: (open: boolean) => void;
   setSearchOpen: (open: boolean) => void;
-  setNewConversationOpen: (open: boolean) => void;
+  setNewConversationOpen: (open: boolean, mode?: 'dm' | 'group') => void;
   setActivePanel: (panel: Panel) => void;
   setNotifOnboarding: (open: boolean) => void;
   muted: string[];
@@ -59,6 +60,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   rightPanelOpen: false,
   searchOpen: false,
   newConversationOpen: false,
+  newConversationMode: 'dm',
   activePanel: 'chats',
   notifOnboarding: false,
   forwardContent: null,
@@ -83,7 +85,11 @@ export const useUiStore = create<UiState>((set, get) => ({
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setRightPanel: (open) => set({ rightPanelOpen: open }),
   setSearchOpen: (open) => set({ searchOpen: open }),
-  setNewConversationOpen: (open) => set({ newConversationOpen: open }),
+  setNewConversationOpen: (open, mode) =>
+    set((state) => ({
+      newConversationOpen: open,
+      newConversationMode: mode ?? (open ? state.newConversationMode : 'dm')
+    })),
   setActivePanel: (panel) => set({ activePanel: panel }),
   setNotifOnboarding: (open) => set({ notifOnboarding: open }),
   setOnline: (value) => set({ online: value }),

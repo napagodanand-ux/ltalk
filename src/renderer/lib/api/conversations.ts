@@ -199,6 +199,39 @@ export async function addParticipants(
   if (error) throw new Error(error.message);
 }
 
+// Renames a group. RLS restricts this to the group's creator (admin).
+export async function renameGroup(conversationId: string, name: string): Promise<void> {
+  const { error } = await supabase
+    .from('conversations')
+    .update({ name })
+    .eq('id', conversationId);
+  if (error) throw new Error(error.message);
+}
+
+// Removes a member from a group. Also drops their sealed group key so they can
+// no longer decrypt new messages. RLS restricts this to the admin (except a
+// member can always remove themselves).
+export async function removeMember(conversationId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('conversation_participants')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId);
+  if (error) throw new Error(error.message);
+  const { error: keyErr } = await supabase
+    .from('conversation_keys')
+    .delete()
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId);
+  if (keyErr) throw new Error(keyErr.message);
+}
+
+// Deletes an entire group conversation (admin only, enforced by RLS).
+export async function deleteGroup(conversationId: string): Promise<void> {
+  const { error } = await supabase.from('conversations').delete().eq('id', conversationId);
+  if (error) throw new Error(error.message);
+}
+
 export async function clearMessages(conversationId: string): Promise<void> {
   const { error } = await supabase
     .from('messages')

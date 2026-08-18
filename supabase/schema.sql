@@ -192,26 +192,30 @@ DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
 CREATE POLICY "Users can view their conversations" ON conversations FOR SELECT
 USING (is_participant(id));
 DROP POLICY IF EXISTS "Users can create conversations" ON conversations;
-CREATE POLICY "Users can create conversations" ON conversations FOR ALL
-USING (created_by = auth.uid() OR is_participant(id))
+CREATE POLICY "Users can create conversations" ON conversations FOR INSERT
 WITH CHECK (auth.uid() = created_by);
+
+DROP POLICY IF EXISTS "Admins can update conversations" ON conversations;
+CREATE POLICY "Admins can update conversations" ON conversations FOR UPDATE
+USING (created_by = auth.uid())
+WITH CHECK (created_by = auth.uid());
 
 DROP POLICY IF EXISTS "Participants can delete conversations" ON conversations;
 CREATE POLICY "Participants can delete conversations" ON conversations FOR DELETE
-USING (is_participant(id));
+USING (created_by = auth.uid());
 
 DROP POLICY IF EXISTS "Users can view participants" ON conversation_participants;
 CREATE POLICY "Users can view participants" ON conversation_participants FOR SELECT
 USING (is_participant(conversation_id));
-DROP POLICY IF EXISTS "Users can add participants" ON conversation_participants;
-CREATE POLICY "Users can add participants" ON conversation_participants FOR ALL
+DROP POLICY IF EXISTS "Admins can add participants" ON conversation_participants;
+CREATE POLICY "Admins can add participants" ON conversation_participants FOR ALL
 USING ((conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid()))
        OR is_participant(conversation_id))
-WITH CHECK ((conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid()))
-       OR is_participant(conversation_id));
-DROP POLICY IF EXISTS "Users can remove themselves" ON conversation_participants;
-CREATE POLICY "Users can remove themselves" ON conversation_participants FOR DELETE
-USING (user_id = auth.uid());
+WITH CHECK (conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid()));
+DROP POLICY IF EXISTS "Users can remove members" ON conversation_participants;
+CREATE POLICY "Users can remove members" ON conversation_participants FOR DELETE
+USING (user_id = auth.uid()
+       OR (conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid())));
 
 DROP POLICY IF EXISTS "Users can view messages" ON messages;
 CREATE POLICY "Users can view messages" ON messages FOR SELECT

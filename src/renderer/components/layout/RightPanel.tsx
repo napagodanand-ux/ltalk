@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { X, UserPlus, UserX, Eraser, Check } from 'lucide-react';
+import { X, UserPlus, UserX, Eraser, Check, Pencil, Trash2, LogOut } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { useConversationStore } from '../../stores/conversationStore';
@@ -20,7 +20,13 @@ import {
   Button
 } from '../ui';
 import { relativeTime } from '../../lib/helpers';
-import { addParticipants, clearMessages } from '../../lib/api/conversations';
+import {
+  addParticipants,
+  clearMessages,
+  renameGroup,
+  removeMember,
+  deleteGroup
+} from '../../lib/api/conversations';
 import * as groupKeysApi from '../../lib/api/groupKeys';
 
 export default function RightPanel() {
@@ -34,10 +40,13 @@ export default function RightPanel() {
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
 
   if (!rightPanelOpen || !activeId || !conversation) return null;
 
   const isGroup = conversation.is_group;
+  const isAdmin = isGroup && conversation.created_by === currentUserId;
   const other = isGroup ? null : conversation.participants.find((p) => p.id !== currentUserId);
   const memberIds = new Set(conversation.participants.map((p) => p.id));
   const candidates = friends.filter((f) => !memberIds.has(f.id));
@@ -77,6 +86,58 @@ export default function RightPanel() {
     }
   };
 
+  const startRename = () => {
+    setNameDraft(conversation?.name ?? '');
+    setEditingName(true);
+  };
+
+  const commitRename = async () => {
+    const trimmed = nameDraft.trim();
+    setEditingName(false);
+    if (!trimmed || trimmed === conversation?.name) return;
+    try {
+      await renameGroup(activeId, trimmed);
+      await useConversationStore.getState().load();
+      showToast('Group renamed');
+    } catch {
+      showToast('Failed to rename group');
+    }
+  };
+
+  const handleRemoveMember = async (userId: string) => {
+    try {
+      await removeMember(activeId, userId);
+      await useConversationStore.getState().load();
+      showToast('Member removed');
+    } catch {
+      showToast('Failed to remove member');
+    }
+  };
+
+  const handleLeave = async () => {
+    if (!window.confirm('Leave this group?')) return;
+    try {
+      await removeMember(activeId, currentUserId ?? '');
+      await useConversationStore.getState().load();
+      setRightPanel(false);
+      showToast('Left group');
+    } catch {
+      showToast('Failed to leave group');
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!window.confirm('Delete this group for everyone? This cannot be undone.')) return;
+    try {
+      await deleteGroup(activeId);
+      await useConversationStore.getState().load();
+      setRightPanel(false);
+      showToast('Group deleted');
+    } catch {
+      showToast('Failed to delete group');
+    }
+  };
+
   return (
     <aside className="flex h-full w-[320px] shrink-0 flex-col border-l border-edge bg-surface">
       <div className="flex items-center justify-between border-b border-edge px-4 py-3">
@@ -99,8 +160,38 @@ export default function RightPanel() {
           />
         )}
         <div className="text-center">
-          <div className="text-base font-semibold text-content">
-            {isGroup ? conversation.name || 'Group' : other?.display_name || other?.username}
+          <div className="flex items-center justify-center gap-1.5 text-base font-semibold text-content">
+            {isGroup ? (
+              editingName ? (
+                <input
+                  autoFocus
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename();
+                    if (e.key === 'Escape') setEditingName(false);
+                  }}
+                  className="w-40 rounded border border-edge bg-bg-tertiary px-2 py-0.5 text-center text-base text-content outline-none"
+                />
+              ) : (
+                <>
+                  <span>{conversation.name || 'Group'}</span>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={startRename}
+                      className="text-content-muted hover:text-content"
+                      aria-label="Rename group"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                </>
+              )
+            ) : (
+              (other?.display_name || other?.username || 'Unknown')
+            )}
           </div>
           {!isGroup && other && <div className="text-xs text-content-muted">@{other.username}</div>}
           {!isGroup && other && (
@@ -117,17 +208,46 @@ export default function RightPanel() {
         </div>
         {isGroup ? (
           <div className="space-y-2">
-            <Button variant="ghost" className="w-full justify-start" onClick={() => setAddOpen(true)}>
-              <UserPlus size={16} /> Add members
-            </Button>
+            {isAdmin && (
+              <Button variant="ghost" className="w-full justify-start" onClick={() => setAddOpen(true)}>
+                <UserPlus size={16} /> Add members
+              </Button>
+            )}
             {conversation.participants.map((p) => (
               <div key={p.id} className="flex items-center gap-2 px-2 py-1">
                 <Avatar src={p.avatar_url} name={p.display_name || p.username} size={28} />
-                <span className="truncate text-sm text-content">
+                <span className="flex-1 truncate text-sm text-content">
                   {p.display_name || p.username}
+                  {p.id === currentUserId && (
+                    <span className="ml-1 text-xs text-content-muted">(you)</span>
+                  )}
+                  {isGroup && conversation.created_by === p.id && (
+                    <span className="ml-1 text-xs text-accent">admin</span>
+                  )}
                 </span>
+                {isAdmin && p.id !== currentUserId && (
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveMember(p.id)}
+                    className="text-content-muted hover:text-red-400"
+                    aria-label="Remove member"
+                  >
+                    <UserX size={15} />
+                  </button>
+                )}
               </div>
             ))}
+            <div className="flex flex-col gap-2 pt-2">
+              {isAdmin ? (
+                <Button variant="ghost" className="w-full justify-start text-red-400" onClick={handleDeleteGroup}>
+                  <Trash2 size={16} /> Delete group
+                </Button>
+              ) : (
+                <Button variant="ghost" className="w-full justify-start text-red-400" onClick={handleLeave}>
+                  <LogOut size={16} /> Leave group
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
           other && (

@@ -60,8 +60,8 @@ export function NewConversationModal() {
   }, [query, runSearch]);
 
   useEffect(() => {
-    if (!open) {
-      setMode('dm');
+    if (open) {
+      setMode(useUiStore.getState().newConversationMode);
       setQuery('');
       setResults([]);
       setGroupName('');
