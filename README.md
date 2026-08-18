@@ -15,13 +15,16 @@ The same client also runs as a web app (which updates live, so it is not version
 
 ## ✨ Features
 
-- **End-to-end encryption (E2EE)** for 1:1 conversations — `ECDH P-256` key exchange + `HKDF` + `AES-256-GCM`.
-- **Real-time messaging** — instant delivery across all open conversations via Supabase Realtime.
-- **Presence & typing** — online / away / offline status and live typing indicators.
-- **Media sharing** — images and files with upload progress and error reporting.
-- **Rich messages** — edit, reactions (emoji), replies, delete-for-me and delete-for-everyone.
+- **End-to-end encryption (E2EE)** — 1:1 chats use `ECDH P-256` + `HKDF` + `AES-256-GCM`; group chats use a per-group symmetric `AES-256-GCM` key sealed to every member with their public key, so the server only ever stores ciphertext.
+- **Real-time messaging** — instant delivery across all open conversations via Supabase Realtime, with read receipts.
+- **Presence & typing** — online / away / offline (a force-killed session shows offline after a short timeout) and live typing indicators.
+- **Media & voice** — images and files with upload progress/error reporting, plus voice messages with in-app playback.
+- **Rich messages** — edit, emoji reactions, replies, emoji picker, delete-for-me (per-account and idempotent) and delete-for-everyone, plus in-app message search (Ctrl+F).
+- **Group chats** — create groups from your friends with full E2EE and admin controls (rename, add/remove members, delete group); the creator is the group admin.
+- **Multi-device E2EE** — your encryption key is backed up (encrypted with your account password) and automatically restored when you sign in on another device, so your conversations stay readable everywhere.
+- **Offline support** — a non-blocking banner appears when the connection drops; local content stays readable and everything re-syncs on reconnect.
+- **Automatic updates** — a launch splash checks for updates; optional updates can be skipped (the very next release then becomes required — a skip-cascade), while forced updates install immediately from GitHub Releases via `electron-updater`.
 - **Cross-platform notifications** — native Windows toasts + Linux notifications, with an in-app fallback.
-- **Automatic updates** — the desktop app self-updates from GitHub Releases via `electron-updater`.
 - **Themes** — light / dark.
 
 ## 🧱 Tech Stack
@@ -37,10 +40,10 @@ The same client also runs as a web app (which updates live, so it is not version
 
 ## 🔐 Security
 
-- 1:1 messages are encrypted **client-side**; the server only ever stores ciphertext.
-- Group conversations are not encrypted (by design) — a trade-off between E2EE and multi-party key management.
-- Supabase Row Level Security (RLS) enforces per-user data isolation on every table.
-- Private keys never leave the device and are stored in the OS credential store.
+- All messages (1:1 and group) are encrypted **client-side**; the server only ever stores ciphertext.
+- Group keys are generated locally and sealed to each member with their public key; a member who leaves or is removed can no longer decrypt new messages.
+- Supabase Row Level Security (RLS) enforces per-user data isolation on every table, and group administration (rename/delete/manage members) is restricted to the group's creator (admin).
+- Private keys never leave the device and are stored in the OS credential store; a password-encrypted backup enables multi-device access without ever exposing the raw key.
 
 ## 💻 Requirements
 
@@ -85,8 +88,10 @@ Download the latest installer for your platform from the
 > `APPIMAGE_EXTRACT_AND_RUN=1 ./LTalk-*.AppImage`. Prefer the `.deb`
 > (`sudo dpkg -i ltalk_*.deb && ltalk`) for a FUSE-free install.
 
-The app checks for updates automatically and prompts you when a new version is available
-(manual check is also available in **Settings → Updates**).
+The app checks for updates automatically on launch (shown in a brief splash) and prompts you when a new version is available.
+Updates are normally **optional** — you can skip one and keep using the current version; however, skipping a release makes the **next** release
+**required** (a skip-cascade), and a server-defined minimum version can also force an update.
+A manual check is always available in **Settings → Updates**.
 
 ## 🛠 Development
 
@@ -132,6 +137,7 @@ GitHub Release that the in-app updater consumes.
 ## 🔄 Automatic Updates
 
 - The desktop app embeds its version and checks `latest.yml` from the GitHub Releases feed.
+- On launch a splash shows the update check; optional updates offer **Update now** / **Skip**, while forced (skipped-cascade or below the server minimum) updates must be installed.
 - Pushing a new `v*` tag produces a new release; installed apps detect it and update.
 - **Web** is served live and therefore has no version pin and no auto-update prompt.
 
