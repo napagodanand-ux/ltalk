@@ -50,6 +50,8 @@ export function AppLayout() {
     window.addEventListener('blur', onBlur);
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('beforeunload', onUnload);
+    // pagehide fires reliably on mobile/tab close where beforeunload can be skipped.
+    window.addEventListener('pagehide', onUnload);
     const heartbeat = setInterval(() => {
       const me = useAuthStore.getState().user?.id;
       if (me) {
@@ -61,6 +63,7 @@ export function AppLayout() {
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('beforeunload', onUnload);
+      window.removeEventListener('pagehide', onUnload);
       clearInterval(heartbeat);
       setStatus('offline');
     };

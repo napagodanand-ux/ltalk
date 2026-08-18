@@ -3,11 +3,14 @@ import { join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
 
 import { WINDOW_DEFAULTS } from './lib/constants';
+import { supabase as authSupabase } from './lib/supabase';
 
 let mainWindow: BrowserWindow | null = null;
 // When true the next window 'close' is allowed to proceed to a full quit
 // (set by the tray "Quit" action via app 'before-quit').
 let forceQuit = false;
+// Guards the offline sync so it runs at most once per quit.
+let offlineSynced = false;
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
@@ -62,8 +65,36 @@ export function createWindow(): BrowserWindow {
     }
   });
 
-  app.on('before-quit', () => {
+  // On a real quit (tray "Quit" / OS terminate) the renderer's beforeunload
+  // presence write is unreliable — the async request is torn down before it
+  // reaches the server, so the profile stays "away". The main process is still
+  // alive here, so we synchronously block the quit, push "offline", then quit.
+  app.on('before-quit', (event: Electron.Event) => {
     forceQuit = true;
+    if (offlineSynced) return;
+    event.preventDefault();
+    offlineSynced = true;
+    const finish = () => app.quit();
+    void (async () => {
+      try {
+        const {
+          data: { session }
+        } = await authSupabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (userId) {
+          await authSupabase
+            .from('profiles')
+            .update({ status: 'offline', last_seen: new Date().toISOString() })
+            .eq('id', userId);
+        }
+      } catch {
+        /* best effort */
+      } finally {
+        setTimeout(finish, 300);
+      }
+    })();
+    // Safety net: never hang the quit if the network stalls.
+    setTimeout(finish, 2000);
   });
 
   return mainWindow;
