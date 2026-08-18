@@ -111,7 +111,7 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
   return { needsRestore: true };
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
   profile: null,
