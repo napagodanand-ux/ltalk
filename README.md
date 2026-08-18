@@ -50,6 +50,13 @@ Download the latest installer for your platform from the
 - **Windows** — `LTalk-Setup-*.exe` (NSIS installer)
 - **Linux** — `LTalk-*.AppImage` or `ltalk_*.deb`
 
+> **Linux / AppImage:** AppImages require FUSE 2 (`libfuse.so.2`). If you see
+> `dlopen(): error loading libfuse.so.2`, either install it
+> (`sudo apt install libfuse2` on Debian/Ubuntu, `sudo dnf install fuse` on Fedora,
+> `sudo pacman -S fuse2` on Arch) or run with
+> `APPIMAGE_EXTRACT_AND_RUN=1 ./LTalk-*.AppImage`. Prefer the `.deb`
+> (`sudo dpkg -i ltalk_*.deb && ltalk`) for a FUSE-free install.
+
 The app checks for updates automatically and prompts you when a new version is available
 (manual check is also available in **Settings → Updates**).
 
