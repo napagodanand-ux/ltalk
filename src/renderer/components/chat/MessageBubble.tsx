@@ -190,7 +190,12 @@ export function MessageBubble({
 
   return (
     <div className={cn('flex w-full', isOwn ? 'justify-end' : 'justify-start')}>
-      <div className="flex max-w-[70%] flex-col">
+      <div
+        className={cn(
+          'flex w-full min-w-0 flex-col',
+          isOwn ? 'items-end' : 'items-start'
+        )}
+      >
         <ContextMenu trigger={bubble}>
           {canEdit && (
             <ContextMenuItem onSelect={() => setEditing(true)}>
