@@ -37,6 +37,10 @@ export function ConversationItem({
 
   const isActive = activeId === conversation.id;
 
+  const subtitle = isGroup
+    ? `${conversation.participants.length} members`
+    : previewFor(conversation);
+
   return (
     <ContextMenu
       trigger={
@@ -58,9 +62,7 @@ export function ConversationItem({
               )}
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-xs text-content-secondary">
-                {previewFor(conversation)}
-              </span>
+              <span className="truncate text-xs text-content-secondary">{subtitle}</span>
               {conversation.unreadCount > 0 && (
                 <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-white">
                   {conversation.unreadCount}

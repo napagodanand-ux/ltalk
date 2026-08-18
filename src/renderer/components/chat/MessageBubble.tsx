@@ -54,6 +54,13 @@ export function MessageBubble({
   const deleted = message.type === 'text' && message.content === null;
   const isAttachment = message.type !== 'text' && Boolean(message.file_url);
 
+  const isGroup = conversation?.is_group;
+  const senderName =
+    isGroup && !isOwn
+      ? conversation?.participants.find((p) => p.id === message.sender_id)?.display_name ||
+        conversation?.participants.find((p) => p.id === message.sender_id)?.username
+      : undefined;
+
   const replySender = replyTo
     ? conversation?.participants.find((p) => p.id === replyTo.sender_id)
     : undefined;
@@ -126,6 +133,9 @@ export function MessageBubble({
         isOwn ? 'bg-primary text-white' : 'bg-surface-hover text-content'
       )}
     >
+      {isGroup && !isOwn && senderName && (
+        <div className="mb-0.5 text-xs font-medium text-content-secondary">{senderName}</div>
+      )}
       {replyTo && (
         <div className="mb-1 border-l-2 border-white/40 pl-2 text-xs opacity-90">
           <div className="font-medium">{replyName}</div>

@@ -21,6 +21,7 @@ import {
 } from '../ui';
 import { relativeTime } from '../../lib/helpers';
 import { addParticipants, clearMessages } from '../../lib/api/conversations';
+import * as groupKeysApi from '../../lib/api/groupKeys';
 
 export default function RightPanel() {
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
@@ -67,6 +68,8 @@ export default function RightPanel() {
   const handleAddMembers = async (userId: string) => {
     try {
       await addParticipants(activeId, [userId]);
+      await groupKeysApi.addGroupMembers(activeId, [userId]);
+      await useConversationStore.getState().load();
       showToast('Member added');
       setAddOpen(false);
     } catch {

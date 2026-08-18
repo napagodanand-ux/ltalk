@@ -164,3 +164,43 @@ export async function decryptKeyBackup(
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
   return JSON.parse(new TextDecoder().decode(plain)) as JsonWebKey;
 }
+
+// --- Symmetric group-key helpers -------------------------------------------
+
+export async function generateSymmetricKey(): Promise<CryptoKey> {
+  return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+    'encrypt',
+    'decrypt'
+  ]);
+}
+
+export async function exportSymmetricKey(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey('raw', key);
+  return toBase64(raw);
+}
+
+export async function importSymmetricKey(rawB64: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', fromBase64(rawB64), { name: 'AES-GCM', length: 256 }, false, [
+    'encrypt',
+    'decrypt'
+  ]);
+}
+
+// Encrypts/decrypts message content with a conversation's symmetric group key.
+export async function aesEncrypt(plaintext: string, key: CryptoKey): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(plaintext);
+  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+  const packaged = new Uint8Array(iv.length + cipher.byteLength);
+  packaged.set(iv, 0);
+  packaged.set(new Uint8Array(cipher), iv.length);
+  return toBase64(packaged.buffer);
+}
+
+export async function aesDecrypt(payload: string, key: CryptoKey): Promise<string> {
+  const packaged = fromBase64(payload);
+  const iv = packaged.slice(0, 12);
+  const cipher = packaged.slice(12);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
+  return new TextDecoder().decode(plain);
+}

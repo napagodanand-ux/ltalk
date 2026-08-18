@@ -89,6 +89,25 @@ CREATE TABLE IF NOT EXISTS reactions (
 
 CREATE INDEX IF NOT EXISTS idx_reactions_message_id ON reactions(message_id);
 
+-- Per-group encryption keys. Each participant stores the conversation's
+-- symmetric key, sealed to their own public key. This lets a group message be
+-- encrypted once with the shared key yet only decryptable by members.
+CREATE TABLE IF NOT EXISTS conversation_keys (
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  encrypted_key TEXT NOT NULL,
+  encryptor_public TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (conversation_id, user_id)
+);
+
+ALTER TABLE conversation_keys ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Participants manage group keys" ON conversation_keys;
+CREATE POLICY "Participants manage group keys" ON conversation_keys FOR ALL
+  USING (is_participant(conversation_id))
+  WITH CHECK (is_participant(conversation_id));
+
 -- updated_at triggers
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$

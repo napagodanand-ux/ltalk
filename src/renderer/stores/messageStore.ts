@@ -3,8 +3,16 @@ import type { Message, Reaction } from '../../../src/shared/types';
 
 import * as messageApi from '../lib/api/messages';
 import * as reactionApi from '../lib/api/reactions';
+import * as groupKeysApi from '../lib/api/groupKeys';
 import { supabase } from '../lib/supabase';
-import { encryptMessage, decryptMessage } from '../lib/encryption';
+import {
+  encryptMessage,
+  decryptMessage,
+  aesEncrypt,
+  aesDecrypt,
+  importSymmetricKey,
+  decodeKey
+} from '../lib/encryption';
 import { getPrivateKey } from '../lib/keys';
 import { useConversationStore } from './conversationStore';
 import { useAuthStore } from './authStore';
@@ -30,10 +38,27 @@ async function getPublicKey(userId: string): Promise<JsonWebKey | null> {
   return safeParseKey(data.public_key);
 }
 
+// Resolves and caches the symmetric key for a group conversation. The key is
+// sealed to this user in `conversation_keys` and opened with our private key.
+const groupKeyCache = new Map<string, CryptoKey>();
+async function getGroupKey(conversationId: string): Promise<CryptoKey> {
+  const cached = groupKeyCache.get(conversationId);
+  if (cached) return cached;
+  const mat = await groupKeysApi.fetchMyGroupKey(conversationId);
+  if (!mat) throw new Error('No group key available');
+  const myPrivate = getPrivateKey();
+  if (!myPrivate) throw new Error('Encryption keys unavailable');
+  const raw = await decryptMessage(mat.encryptedKey, myPrivate, decodeKey(mat.encryptorPublic));
+  const key = await importSymmetricKey(raw);
+  groupKeyCache.set(conversationId, key);
+  return key;
+}
+
 // Decrypt a message using the COUNTERPARTY's public key (the other participant
 // in the 1:1 conversation). For a sent message the counterparty is the recipient,
 // for a received message it is the sender. Using message.sender_id's key directly
 // is wrong for our own messages, so we resolve the other participant instead.
+// Group messages are decrypted with the conversation's shared symmetric key.
 async function decryptIfNeeded(message: Message): Promise<Message> {
   if (!message.encrypted || !message.content) return message;
   const privateKey = getPrivateKey();
@@ -44,6 +69,17 @@ async function decryptIfNeeded(message: Message): Promise<Message> {
   const conversation = useConversationStore
     .getState()
     .conversations.find((c) => c.id === message.conversation_id);
+
+  if (conversation?.is_group) {
+    try {
+      const key = await getGroupKey(message.conversation_id);
+      const plain = await aesDecrypt(message.content, key);
+      return { ...message, content: plain };
+    } catch {
+      return { ...message, content: '🔒 Encrypted message' };
+    }
+  }
+
   const other = conversation?.participants.find((p) => p.id !== meId);
 
   let publicKey: JsonWebKey | null = other?.public_key ? safeParseKey(other.public_key) : null;
@@ -144,6 +180,13 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           content = await encryptMessage(text, privateKey, theirPublic);
           encrypted = true;
         }
+      }
+    } else if (conversation?.is_group) {
+      const privateKey = getPrivateKey();
+      if (privateKey) {
+        const key = await getGroupKey(conversationId);
+        content = await aesEncrypt(text, key);
+        encrypted = true;
       }
     }
 
@@ -268,6 +311,13 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           content = await encryptMessage(newText, privateKey, theirPublic);
           encrypted = true;
         }
+      }
+    } else if (conversation?.is_group) {
+      const privateKey = getPrivateKey();
+      if (privateKey) {
+        const key = await getGroupKey(conversationId);
+        content = await aesEncrypt(newText, key);
+        encrypted = true;
       }
     }
 
