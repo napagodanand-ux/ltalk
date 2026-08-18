@@ -26,6 +26,13 @@ export function SettingsPage() {
   const [checking, setChecking] = useState(false);
   const [notifMsg, setNotifMsg] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [updateReady, setUpdateReady] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+
+  // The web build updates itself via GitHub Pages, so the desktop auto-updater
+  // UI is irrelevant there.
+  const isElectron = typeof window !== 'undefined' && window.electron?.isElectron === true;
 
   useEffect(() => {
     window.electron.app.version().then(setAppVersion).catch(() => setAppVersion(null));
@@ -35,11 +42,27 @@ export function SettingsPage() {
     const unsubscribe = window.electron.on('updater:event', (...args: unknown[]) => {
       const data = args[0] as UpdaterEvent | undefined;
       const evt = data?.event;
-      if (evt === 'available') setUpdateStatus('Update available');
-      else if (evt === 'progress') setUpdateStatus('Downloading…');
-      else if (evt === 'downloaded') setUpdateStatus('Update ready to install');
-      else if (evt === 'not-available') setUpdateStatus('Up to date');
-      else if (evt === 'error') {
+      const payload = data?.payload as { version?: string; percent?: number } | undefined;
+      if (evt === 'available') {
+        setUpdateReady(false);
+        setDownloadProgress(0);
+        setUpdateVersion(payload?.version ?? null);
+        setUpdateStatus('Update available');
+      } else if (evt === 'progress') {
+        setDownloadProgress(payload?.percent ?? 0);
+        setUpdateStatus('Downloading…');
+      } else if (evt === 'downloaded') {
+        setUpdateReady(true);
+        setDownloadProgress(100);
+        setUpdateStatus('Update ready to install');
+      } else if (evt === 'not-available') {
+        setUpdateReady(false);
+        setDownloadProgress(0);
+        setUpdateStatus('Up to date');
+      } else if (evt === 'checking') {
+        setUpdateStatus('Checking…');
+      } else if (evt === 'error') {
+        setUpdateReady(false);
         setUpdateStatus(typeof data?.payload === 'string' ? data.payload : 'Update check failed');
       }
     });
@@ -49,12 +72,22 @@ export function SettingsPage() {
   const handleCheckUpdates = async () => {
     setChecking(true);
     setUpdateStatus(null);
+    setUpdateReady(false);
+    setDownloadProgress(0);
     try {
       await window.electron.updates.check();
     } catch (err) {
       setUpdateStatus(err instanceof Error ? err.message : 'Failed to check for updates');
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    try {
+      await window.electron.updates.install();
+    } catch {
+      /* ignored */
     }
   };
 
@@ -136,21 +169,47 @@ export function SettingsPage() {
             </Button>
           </section>
 
-          <section className="rounded-xl border border-edge bg-surface p-5 shadow-panel">
-            <h2 className="mb-3 text-sm font-semibold text-content">Updates</h2>
-            <Button
-              variant="outline"
-              className="flex h-8 items-center gap-2"
-              onClick={handleCheckUpdates}
-              disabled={checking}
-            >
-              <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
-              Check for updates
-            </Button>
-            {updateStatus && (
-              <p className="mt-2 text-xs text-content-secondary">{updateStatus}</p>
-            )}
-          </section>
+          {isElectron && (
+            <section className="rounded-xl border border-edge bg-surface p-5 shadow-panel">
+              <h2 className="mb-3 text-sm font-semibold text-content">Updates</h2>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="flex h-8 items-center gap-2"
+                  onClick={handleCheckUpdates}
+                  disabled={checking || updateReady}
+                >
+                  <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
+                  Check for updates
+                </Button>
+                {updateReady && (
+                  <Button className="flex h-8 items-center gap-2" onClick={handleInstallUpdate}>
+                    Install &amp; restart
+                  </Button>
+                )}
+              </div>
+
+              {updateReady ? (
+                <p className="mt-2 text-xs text-content-secondary">
+                  Update ready{updateVersion ? ` (v${updateVersion})` : ''} — restart to apply.
+                </p>
+              ) : downloadProgress > 0 && downloadProgress < 100 ? (
+                <div className="mt-3">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-surface-hover">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-200"
+                      style={{ width: `${Math.round(downloadProgress)}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-content-secondary">
+                    Downloading… {Math.round(downloadProgress)}%
+                  </p>
+                </div>
+              ) : updateStatus ? (
+                <p className="mt-2 text-xs text-content-secondary">{updateStatus}</p>
+              ) : null}
+            </section>
+          )}
 
           <section className="rounded-xl border border-edge bg-surface p-5 shadow-panel">
             <h2 className="mb-3 text-sm font-semibold text-content">About</h2>
@@ -160,7 +219,7 @@ export function SettingsPage() {
             </p>
             <p className="mt-2 text-xs text-content-muted">
               Version <span className="text-content-secondary">{appVersion ?? '…'}</span>
-              <span className="ml-1 text-content-muted">(desktop app)</span>
+              {isElectron && <span className="ml-1 text-content-muted">(desktop app)</span>}
             </p>
           </section>
 

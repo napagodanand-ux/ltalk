@@ -12,7 +12,10 @@ function notifyRenderer(event: string, payload: unknown): void {
 }
 
 export function initUpdater(): void {
-  autoUpdater.autoDownload = false;
+  // Download updates automatically once they're found (the UI then offers an
+  // "Install & restart" action). Without this, the app only ever reported
+  // "update available" and never fetched/installed anything.
+  autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = log;
 
@@ -22,6 +25,10 @@ export function initUpdater(): void {
   autoUpdater.on('download-progress', (progress) => notifyRenderer('progress', progress));
   autoUpdater.on('update-downloaded', (info) => notifyRenderer('downloaded', info));
   autoUpdater.on('error', (err) => notifyRenderer('error', err.message));
+
+  // Look for updates on launch so the download starts in the background and the
+  // user is prompted to restart once it's ready.
+  checkForUpdates();
 
   log.info('Auto-updater initialized');
 }
