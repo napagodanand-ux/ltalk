@@ -42,7 +42,11 @@ export function AppLayout() {
       void updatePresence(status);
     };
     setStatus('online');
-    const onFocus = () => setStatus('online');
+    const onFocus = () => {
+      setStatus('online');
+      const aid = useConversationStore.getState().activeId;
+      if (aid) void useMessageStore.getState().markRead(aid);
+    };
     const onBlur = () => setStatus('away');
     const onVisibility = () => setStatus(document.hidden ? 'away' : 'online');
     const onUnload = () => setStatus('offline');
@@ -158,9 +162,14 @@ export function AppLayout() {
   useEffect(() => {
     if (!activeId) return;
     const messageStore = useMessageStore.getState();
-    void messageStore.load(activeId);
-    void messageStore.loadReactions(activeId);
-    void messageStore.markRead(activeId);
+    // Await load() before markRead so byConversation is populated (markRead needs
+    // the last message) — otherwise the first markRead is a no-op and the read
+    // receipt never reaches the database.
+    void (async () => {
+      await messageStore.load(activeId);
+      void messageStore.loadReactions(activeId);
+      await messageStore.markRead(activeId);
+    })();
 
     // Realtime (WebSocket) is unreliable inside the Electron runtime, so poll the
     // active conversation as a guaranteed fallback for new messages / read receipts.

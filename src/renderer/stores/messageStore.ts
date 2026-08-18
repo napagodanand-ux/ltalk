@@ -230,8 +230,13 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       return;
 
     const focused = typeof document !== 'undefined' && document.hasFocus();
-    // Already looking at this chat — no need to notify.
-    if (focused && isActive) return;
+    // Already looking at this chat: no need to notify, and because the message is
+    // on screen we persist the read receipt immediately. Otherwise a later refresh
+    // (or the 4s poll not having fired yet) would recompute it as unread.
+    if (focused && isActive) {
+      void get().markRead(message.conversation_id);
+      return;
+    }
 
     const conversation = conversationStore.conversations.find(
       (c) => c.id === message.conversation_id
