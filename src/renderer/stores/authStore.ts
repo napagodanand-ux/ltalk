@@ -29,12 +29,24 @@ interface AuthState {
   setProfile: (profile: Profile) => void;
   setPendingRestore: (value: boolean) => void;
   restoreWithPassword: (password: string) => Promise<boolean>;
+  resetEncryption: (password: string) => Promise<boolean>;
 }
 
+// Compare by the actual public key point, not the JSON-string encoding. The
+// registered public key (full JWK) and the derived one (compact) serialize
+// differently, so a naive string compare is always false and would make the
+// local key look untrusted. Comparing the raw x/y is encoding-agnostic.
 function publicMatches(privateJwk: JsonWebKey, publicB64: string | null): boolean {
   if (!publicB64) return false;
   try {
-    return encodeKey(publicFromPrivate(privateJwk)) === publicB64;
+    const derived = publicFromPrivate(privateJwk);
+    const stored = JSON.parse(atob(publicB64)) as JsonWebKey;
+    return (
+      derived.kty === stored.kty &&
+      derived.crv === stored.crv &&
+      derived.x === stored.x &&
+      derived.y === stored.y
+    );
   } catch {
     return false;
   }
@@ -251,6 +263,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return true;
     } catch {
       set({ restoreError: 'Incorrect password. Please try again.' });
+      return false;
+    }
+  },
+
+  resetEncryption: async (password) => {
+    const profile = get().profile;
+    if (!profile) return false;
+    try {
+      // Break-glass recovery: the password-backed backup cannot be restored
+      // (e.g. the account password was changed after sign-up), so the
+      // registered public key is permanently mismatched with the device key.
+      // Generate a fresh pair, publish its public key, and re-backup it with
+      // the *current* password so future restores work. Old messages are
+      // unrecoverable, but new ones become readable again.
+      const pair = await generateKeyPair();
+      setPrivateKey(pair.privateKeyJwk);
+      await writeStoredKey(profile.id, encodeKey(pair.privateKeyJwk));
+      const backup = await encryptKeyBackup(pair.privateKeyJwk, password);
+      await updateProfile(profile.id, {
+        public_key: encodeKey(pair.publicKeyJwk),
+        key_backup_cipher: backup.cipher,
+        key_backup_salt: backup.salt
+      });
+      set({ pendingRestore: false, restoreError: null });
+      return true;
+    } catch {
+      set({ restoreError: 'Could not reset encryption keys.' });
       return false;
     }
   }
