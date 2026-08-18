@@ -66,21 +66,25 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
     }
   }
 
-  // 2) Recover from the password-encrypted backup. Critically: if a backup
-  //    exists but it fails to restore (wrong password, corrupt, or no longer
-  //    matches the registered public key) we must NEVER regenerate and
-  //    overwrite the canonical public key — that would orphan every existing
-  //    conversation and make them all unreadable ("🔒 Encrypted message").
+  // 2) Recover from the password-encrypted backup. The backup is encrypted with
+  //    the account password, so a successful decrypt is authoritative proof of
+  //    the user's real key. We adopt it and (self-heal) re-publish its public
+  //    key, repairing any drift in the registered `public_key` (e.g. left
+  //    behind by an earlier bug) that would otherwise make every conversation
+  //    unreadable ("🔒 Encrypted message"). We must NEVER regenerate/overwrite
+  //    the key when the backup cannot be restored.
   if (hasBackup && password) {
     try {
       const priv = await decryptKeyBackup(cipher, salt, password);
-      if (publicMatches(priv, profile.public_key)) {
-        setPrivateKey(priv);
-        await window.electron.secure.storeKey('privateKey', encodeKey(priv));
-        return { needsRestore: false };
+      setPrivateKey(priv);
+      await window.electron.secure.storeKey('privateKey', encodeKey(priv));
+      const pub = encodeKey(publicFromPrivate(priv));
+      if (pub !== profile.public_key) {
+        await updateProfile(profile.id, { public_key: pub });
       }
+      return { needsRestore: false };
     } catch {
-      /* fall through */
+      /* wrong password or corrupt backup — do NOT overwrite the public key */
     }
     return { needsRestore: true };
   }
@@ -197,12 +201,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     try {
       const priv = await decryptKeyBackup(profile.key_backup_cipher, profile.key_backup_salt, password);
-      if (!publicMatches(priv, profile.public_key)) {
-        set({ restoreError: 'This password does not match your encryption key.' });
-        return false;
-      }
       setPrivateKey(priv);
       await window.electron.secure.storeKey('privateKey', encodeKey(priv));
+      // The backup is authoritative: re-publish its public key so a drifted
+      // registered key is repaired and conversations become readable again.
+      const pub = encodeKey(publicFromPrivate(priv));
+      if (pub !== profile.public_key) {
+        await updateProfile(profile.id, { public_key: pub });
+      }
       set({ pendingRestore: false, restoreError: null });
       return true;
     } catch {
