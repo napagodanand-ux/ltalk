@@ -122,6 +122,9 @@ function createFallback(): Api {
       canMessage: async () => true,
       block: async () => true
     },
+    app: {
+      version: async () => 'web'
+    },
     on: () => () => {}
   };
 }
