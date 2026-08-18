@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import type { Message, MessageType } from '../../../../src/shared/types';
 
 import { IconButton, Textarea, Spinner } from '../ui';
+import { EmojiPicker } from '../ui/EmojiPicker';
 import { Send, Paperclip } from 'lucide-react';
 
 import { useMessageStore } from '../../stores/messageStore';
@@ -62,7 +63,23 @@ export function MessageInput({
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
   const pushToast = useToastStore((s) => s.push);
+
+  const insertEmoji = (emoji: string) => {
+    const el = textRef.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + emoji + text.slice(end);
+    setText(next);
+    requestAnimationFrame(() => {
+      if (el) {
+        const pos = start + emoji.length;
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      }
+    });
+  };
 
   const handleSend = async () => {
     const trimmed = text.trim();
@@ -116,6 +133,7 @@ export function MessageInput({
         </IconButton>
 
         <Textarea
+          ref={textRef}
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
@@ -126,6 +144,8 @@ export function MessageInput({
             'bg-surface px-3'
           )}
         />
+
+        <EmojiPicker onSelect={insertEmoji} label="Insert emoji" align="right" />
 
         <IconButton
           label="Send"

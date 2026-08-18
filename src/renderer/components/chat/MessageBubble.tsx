@@ -14,12 +14,11 @@ import {
 import type { Message } from '../../../../src/shared/types';
 
 import { formatFileSize, formatTimestamp, cn } from '../../lib/helpers';
+import { EmojiPanel } from '../ui/EmojiPicker';
 import { useMessageStore } from '../../stores/messageStore';
 import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useConversationStore } from '../../stores/conversationStore';
-
-const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '👏'];
 
 function removeLocal(message: Message): void {
   useMessageStore.setState((state) => ({
@@ -263,22 +262,16 @@ export function MessageBubble({
         {pickerOpen && canReact && (
           <div
             className={cn(
-              'mt-1 flex w-fit gap-1 rounded-md border border-edge bg-surface p-1 shadow-panel',
+              'mt-1 rounded-md border border-edge bg-surface p-1 shadow-panel',
               isOwn ? 'self-end' : 'self-start'
             )}
           >
-            {EMOJIS.map((e) => (
-              <button
-                key={e}
-                onClick={() => {
-                  void useMessageStore.getState().toggleReaction(message.id, e);
-                  setPickerOpen(false);
-                }}
-                className="rounded px-1 text-lg leading-none hover:scale-110 hover:bg-surface-hover"
-              >
-                {e}
-              </button>
-            ))}
+            <EmojiPanel
+              onSelect={(e) => {
+                void useMessageStore.getState().toggleReaction(message.id, e);
+                setPickerOpen(false);
+              }}
+            />
           </div>
         )}
       </div>
