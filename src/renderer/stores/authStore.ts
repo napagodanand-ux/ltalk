@@ -94,15 +94,20 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
   const salt = profile.key_backup_salt;
   const hasBackup = Boolean(cipher && salt);
 
-  // 1) Reuse the locally stored key when it matches the canonical public key.
+  // 1) Reuse the locally stored key. The namespaced store key is scoped to this
+  //    account, so it is the authoritative device key. Keep the server's
+  //    registered public key in sync with it: if they diverge (registered key
+  //    drifted, or the other device rotated/resetted the key), republish the
+  //    matching public key so counterparties can derive the shared secret.
   const stored = await readStoredKey(profile.id, profile.public_key);
   if (stored) {
     try {
       const priv = decodeKey(stored);
-      if (publicMatches(priv, profile.public_key)) {
-        setPrivateKey(priv);
-        return { needsRestore: false };
+      setPrivateKey(priv);
+      if (!publicMatches(priv, profile.public_key)) {
+        await updateProfile(profile.id, { public_key: encodeKey(publicFromPrivate(priv)) });
       }
+      return { needsRestore: false };
     } catch {
       /* fall through to recovery */
     }

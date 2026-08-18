@@ -38,6 +38,24 @@ async function getPublicKey(userId: string): Promise<JsonWebKey | null> {
   return safeParseKey(data.public_key);
 }
 
+// Resolves the counterparty's current public key. We prefer a freshly-fetched
+// key from the server over the participant cache: the cache is only refreshed
+// when conversations are reloaded, so it goes stale the moment the other side
+// rotates/resets their key (e.g. on another device). Trusting it would make us
+// encrypt/decrypt against an old key and permanently fail — the exact
+// multi-device "🔒 Encrypted message" symptom. Fall back to the cache only if
+// the server has no key.
+async function resolveCounterpartyPublicKey(
+  otherId: string | undefined,
+  cachedB64: string | null | undefined
+): Promise<JsonWebKey | null> {
+  if (otherId) {
+    const fresh = await getPublicKey(otherId);
+    if (fresh) return fresh;
+  }
+  return cachedB64 ? safeParseKey(cachedB64) : null;
+}
+
 // Resolves and caches the symmetric key for a group conversation. The key is
 // sealed to this user in `conversation_keys` and opened with our private key.
 const groupKeyCache = new Map<string, CryptoKey>();
@@ -103,8 +121,7 @@ async function decryptIfNeeded(message: Message): Promise<Message> {
 
   const other = conversation?.participants.find((p) => p.id !== meId);
 
-  let publicKey: JsonWebKey | null = other?.public_key ? safeParseKey(other.public_key) : null;
-  if (!publicKey) publicKey = await getPublicKey(message.sender_id);
+  const publicKey = await resolveCounterpartyPublicKey(other?.id, other?.public_key);
   if (!publicKey) return message;
 
   try {
@@ -194,10 +211,10 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     let encrypted = false;
     if (conversation && !conversation.is_group) {
       const other = conversation.participants.find((p) => p.id !== user.id);
-      if (other?.public_key) {
+      if (other) {
         const privateKey = getPrivateKey();
-        const theirPublic = JSON.parse(atob(other.public_key)) as JsonWebKey;
-        if (privateKey) {
+        const theirPublic = await resolveCounterpartyPublicKey(other.id, other.public_key);
+        if (privateKey && theirPublic) {
           content = await encryptMessage(text, privateKey, theirPublic);
           encrypted = true;
         }
