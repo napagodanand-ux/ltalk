@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useConversationStore } from '../../stores/conversationStore';
 import * as conversationsApi from '../../lib/api/conversations';
 import { ROUTES } from '../../lib/constants';
+import { effectiveStatus } from '../../lib/helpers';
 import type { Profile } from '../../../../src/shared/types';
 import { Avatar, ContextMenu, ContextMenuItem, IconButton } from '../ui';
 
@@ -64,7 +65,7 @@ export function FriendsList() {
               src={fr.profile.avatar_url}
               name={fr.profile.display_name || fr.profile.username}
               size={32}
-              status={fr.profile.status}
+              status={effectiveStatus(fr.profile.status, fr.profile.last_seen)}
             />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm text-content">
@@ -93,7 +94,12 @@ export function FriendsList() {
             key={f.id}
             trigger={
               <div className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-surface-hover">
-                <Avatar src={f.avatar_url} name={f.display_name || f.username} size={32} status={f.status} />
+                <Avatar
+                  src={f.avatar_url}
+                  name={f.display_name || f.username}
+                  size={32}
+                  status={effectiveStatus(f.status, f.last_seen)}
+                />
                 <div className="min-w-0">
                   <div className="truncate text-sm text-content">
                     {f.display_name || f.username}

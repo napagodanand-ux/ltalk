@@ -12,6 +12,8 @@ interface UiState {
   activePanel: Panel;
   notifOnboarding: boolean;
   forwardContent: string | null;
+  online: boolean;
+  setOnline: (value: boolean) => void;
   setForwardContent: (content: string | null) => void;
   setTheme: (theme: ThemeName) => void;
   toggleTheme: () => void;
@@ -52,6 +54,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   activePanel: 'chats',
   notifOnboarding: false,
   forwardContent: null,
+  online: true,
   muted: [],
 
   setTheme: (theme) => {
@@ -71,6 +74,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   setNewConversationOpen: (open) => set({ newConversationOpen: open }),
   setActivePanel: (panel) => set({ activePanel: panel }),
   setNotifOnboarding: (open) => set({ notifOnboarding: open }),
+  setOnline: (value) => set({ online: value }),
   setForwardContent: (content) => set({ forwardContent: content }),
 
   toggleMute: (conversationId) => {

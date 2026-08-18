@@ -3,6 +3,7 @@ import { Info, Search } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { effectiveStatus } from '../../lib/helpers';
 import type { ConversationView } from '../../stores/conversationStore';
 
 function capitalize(value: string): string {
@@ -25,7 +26,9 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
   const avatarSrc = isGroup ? conversation.group_avatar_url : (other?.avatar_url ?? null);
   const subtitle = isGroup
     ? `${conversation.participants.length} members`
-    : (other?.status ? capitalize(other.status) : 'Offline');
+    : other
+      ? capitalize(effectiveStatus(other.status, other.last_seen))
+      : 'Offline';
 
   return (
     <div className="flex items-center gap-3 border-b border-edge bg-bg-secondary px-4 py-2.5">

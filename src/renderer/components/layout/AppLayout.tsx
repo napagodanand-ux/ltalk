@@ -17,6 +17,7 @@ import { updatePresence } from '../../lib/api/profile';
 import { Toaster } from '../Toaster';
 import { RestoreKeysModal } from '../auth/RestoreKeysModal';
 import { SearchModal } from '../chat/SearchModal';
+import { OfflineOverlay } from './OfflineOverlay';
 import { APP_MENU_CHANNELS } from '../../lib/constants';
 
 export function AppLayout() {
@@ -35,6 +36,43 @@ export function AppLayout() {
     void loadFriends();
     void useMessageStore.getState().loadDeletedForMe();
   }, [loadConversations, loadFriends]);
+
+  // Connectivity: track navigator.onLine plus a periodic reachability ping so a
+  // "connected to Wi-Fi but no internet" state is also detected. Drives the
+  // offline overlay; local reading/scrolling stays usable underneath it.
+  useEffect(() => {
+    const setOnline = useUiStore.getState().setOnline;
+    const update = (value: boolean) => setOnline(value);
+
+    update(navigator.onLine);
+    const onOnline = () => update(true);
+    const onOffline = () => update(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    let cancelled = false;
+    const ping = async () => {
+      if (!navigator.onLine) {
+        update(false);
+        return;
+      }
+      try {
+        const { error } = await supabase.from('profiles').select('id').limit(1);
+        if (!cancelled) update(!error);
+      } catch {
+        if (!cancelled) update(false);
+      }
+    };
+    const pingInterval = setInterval(ping, 20000);
+    ping();
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      clearInterval(pingInterval);
+    };
+  }, []);
 
   // Presence: publish online/away/offline and keep "online" fresh with a
   // heartbeat so peers can show an accurate status. Drives the live status
@@ -237,6 +275,7 @@ export function AppLayout() {
       <Toaster />
       <RestoreKeysModal />
       <SearchModal />
+      <OfflineOverlay />
     </div>
   );
 }

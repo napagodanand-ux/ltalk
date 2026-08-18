@@ -4,7 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { useUiStore } from '../../stores/uiStore';
 import { Avatar, ContextMenu, ContextMenuItem } from '../ui';
-import { cn, formatTimestamp, messagePreview } from '../../lib/helpers';
+import { cn, formatTimestamp, messagePreview, effectiveStatus } from '../../lib/helpers';
 import { deleteConversation } from '../../lib/api/conversations';
 
 function previewFor(conversation: ConversationView): string {
@@ -51,7 +51,12 @@ export function ConversationItem({
             isActive ? 'bg-surface-hover' : 'hover:bg-surface-hover'
           )}
         >
-          <Avatar src={avatarSrc} name={title} size={40} status={other?.status} />
+          <Avatar
+            src={avatarSrc}
+            name={title}
+            size={40}
+            status={other ? effectiveStatus(other.status, other.last_seen) : undefined}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-sm font-medium text-content">{title}</span>

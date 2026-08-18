@@ -66,3 +66,20 @@ export function debounce<T extends (...args: never[]) => void>(fn: T, delay = 30
     timer = setTimeout(() => fn(...args), delay);
   }) as T;
 }
+
+// A profile is treated as offline when it is explicitly offline OR its last
+// heartbeat/seen timestamp is stale. This is what makes a force-killed app
+// (where no unload event fires) eventually show as offline instead of "away".
+const OFFLINE_AFTER_MS = 90_000;
+
+export type EffectiveStatus = 'online' | 'away' | 'offline';
+
+export function effectiveStatus(
+  status: EffectiveStatus | undefined | null,
+  lastSeen: string | undefined | null
+): EffectiveStatus {
+  if (status === 'offline') return 'offline';
+  const seen = lastSeen ? new Date(lastSeen).getTime() : 0;
+  if (!seen || Date.now() - seen > OFFLINE_AFTER_MS) return 'offline';
+  return status === 'away' ? 'away' : 'online';
+}
