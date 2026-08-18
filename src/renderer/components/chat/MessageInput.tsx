@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Message, MessageType } from '../../../../src/shared/types';
 
 import { IconButton, Textarea, Spinner } from '../ui';
 import { EmojiPicker } from '../ui/EmojiPicker';
-import { Send, Paperclip } from 'lucide-react';
+import { Send, Paperclip, Mic, Square, X } from 'lucide-react';
 
 import { useMessageStore } from '../../stores/messageStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -62,9 +62,23 @@ export function MessageInput({
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const pushToast = useToastStore((s) => s.push);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   const insertEmoji = (emoji: string) => {
     const el = textRef.current;
@@ -79,6 +93,63 @@ export function MessageInput({
         el.setSelectionRange(pos, pos);
       }
     });
+  };
+
+  const stopTracks = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      cancelledRef.current = false;
+      const recorder = new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stopTracks();
+        setRecording(false);
+        setElapsed(0);
+        if (cancelledRef.current) return;
+        const blob = new Blob(chunksRef.current, {
+          type: recorder.mimeType || 'audio/webm'
+        });
+        const file = new File([blob], `voice-${Date.now()}.webm`, {
+          type: blob.type
+        });
+        try {
+          await sendFile(conversationId, file);
+        } catch {
+          pushToast({ body: 'Failed to send voice message', variant: 'error' });
+        }
+      };
+      recorder.start();
+      setRecording(true);
+      setElapsed(0);
+      timerRef.current = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    } catch {
+      pushToast({ body: 'Microphone unavailable or permission denied', variant: 'error' });
+    }
+  };
+
+  const stopRecording = () => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop();
+    }
+  };
+
+  const cancelRecording = () => {
+    cancelledRef.current = true;
+    stopRecording();
   };
 
   const handleSend = async () => {
@@ -126,35 +197,61 @@ export function MessageInput({
 
   return (
     <div className="border-t border-edge bg-bg-secondary">
-      <div className="flex items-end gap-2 px-3 py-2">
-        <input ref={fileRef} type="file" className="hidden" onChange={handleFile} />
-        <IconButton label="Attach file" onClick={() => fileRef.current?.click()} disabled={uploading}>
-          {uploading ? <Spinner size={16} /> : <Paperclip size={18} />}
-        </IconButton>
+      {recording ? (
+        <div className="flex items-center gap-3 px-3 py-2">
+          <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-500" />
+          <span className="font-mono text-sm tabular-nums text-content">
+            {String(Math.floor(elapsed / 60)).padStart(2, '0')}:
+            {String(elapsed % 60).padStart(2, '0')}
+          </span>
+          <span className="text-xs text-content-muted">Recording…</span>
+          <div className="flex-1" />
+          <IconButton label="Cancel recording" onClick={cancelRecording}>
+            <X size={18} />
+          </IconButton>
+          <IconButton
+            label="Send voice message"
+            onClick={stopRecording}
+            className="bg-primary text-white hover:bg-primary-hover"
+          >
+            <Square size={18} />
+          </IconButton>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2 px-3 py-2">
+          <input ref={fileRef} type="file" className="hidden" onChange={handleFile} />
+          <IconButton label="Attach file" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? <Spinner size={16} /> : <Paperclip size={18} />}
+          </IconButton>
 
-        <Textarea
-          ref={textRef}
-          value={text}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          rows={1}
-          placeholder="Type a message"
-          className={cn(
-            'min-h-[36px] max-h-32 flex-1 rounded-md py-2 text-sm leading-5',
-            'bg-surface px-3'
-          )}
-        />
+          <Textarea
+            ref={textRef}
+            value={text}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            placeholder="Type a message"
+            className={cn(
+              'min-h-[36px] max-h-32 flex-1 rounded-md py-2 text-sm leading-5',
+              'bg-surface px-3'
+            )}
+          />
 
-        <EmojiPicker onSelect={insertEmoji} label="Insert emoji" align="right" />
+          <EmojiPicker onSelect={insertEmoji} label="Insert emoji" align="right" />
 
-        <IconButton
-          label="Send"
-          onClick={() => void handleSend()}
-          className="bg-primary text-white hover:bg-primary-hover"
-        >
-          <Send size={18} />
-        </IconButton>
-      </div>
+          <IconButton label="Record voice message" onClick={() => void startRecording()}>
+            <Mic size={18} />
+          </IconButton>
+
+          <IconButton
+            label="Send"
+            onClick={() => void handleSend()}
+            className="bg-primary text-white hover:bg-primary-hover"
+          >
+            <Send size={18} />
+          </IconButton>
+        </div>
+      )}
       {uploading && (
         <div className="h-1 w-full overflow-hidden bg-surface">
           <div

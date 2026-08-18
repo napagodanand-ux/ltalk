@@ -138,6 +138,9 @@ export function MessageBubble({
         <span className="italic opacity-70">This message was deleted</span>
       ) : isAttachment ? (
         <div className="space-y-1">
+          {message.type === 'voice' && message.file_url && (
+            <audio controls src={message.file_url} className="max-w-[260px]" />
+          )}
           {message.type === 'image' && message.file_url && (
             <a href={message.file_url} target="_blank" rel="noreferrer">
               <img
