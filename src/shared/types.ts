@@ -5,6 +5,8 @@ export interface Profile {
   avatar_url: string | null;
   bio: string;
   public_key: string | null;
+  key_backup_cipher: string | null;
+  key_backup_salt: string | null;
   status: 'online' | 'offline' | 'away';
   last_seen: string;
   created_at: string;

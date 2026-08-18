@@ -1,10 +1,14 @@
 import { supabase } from '../supabase';
 import type { Profile } from '../../../../src/shared/types';
 
+// Columns safe to return to other users (never the encrypted key backup).
+const PROFILE_PUBLIC_SELECT =
+  'id, username, display_name, avatar_url, bio, public_key, status, last_seen';
+
 export async function fetchProfileById(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_PUBLIC_SELECT)
     .eq('id', userId)
     .single();
   if (error) return null;
@@ -14,7 +18,7 @@ export async function fetchProfileById(userId: string): Promise<Profile | null> 
 export async function searchUsers(query: string, limit = 20): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_PUBLIC_SELECT)
     .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
     .limit(limit);
   if (error) return [];
@@ -23,7 +27,12 @@ export async function searchUsers(query: string, limit = 20): Promise<Profile[]>
 
 export async function updateProfile(
   userId: string,
-  updates: Partial<Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'public_key'>>
+  updates: Partial<
+    Pick<
+      Profile,
+      'display_name' | 'bio' | 'avatar_url' | 'public_key' | 'key_backup_cipher' | 'key_backup_salt'
+    >
+  >
 ): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')

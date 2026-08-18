@@ -96,7 +96,10 @@ async function fetchParticipants(conversationId: string): Promise<Profile[]> {
     .eq('conversation_id', conversationId);
   if (!data?.length) return [];
   const ids = data.map((p) => p.user_id);
-  const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids);
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, username, display_name, avatar_url, bio, public_key, status, last_seen')
+    .in('id', ids);
   return (profiles as Profile[]) ?? [];
 }
 

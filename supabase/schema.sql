@@ -12,11 +12,18 @@ CREATE TABLE IF NOT EXISTS profiles (
   avatar_url TEXT,
   bio TEXT DEFAULT '',
   public_key TEXT,
+  key_backup_cipher TEXT,
+  key_backup_salt TEXT,
   status TEXT DEFAULT 'offline',
   last_seen TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add the encrypted-key-backup columns on existing databases whose schema
+-- predates multi-device E2EE.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS key_backup_cipher TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS key_backup_salt TEXT;
 
 CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

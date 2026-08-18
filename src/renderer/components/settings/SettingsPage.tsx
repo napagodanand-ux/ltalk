@@ -169,6 +169,15 @@ export function SettingsPage() {
             </Button>
           </section>
 
+          <section className="rounded-xl border border-edge bg-surface p-5 shadow-panel">
+            <h2 className="mb-3 text-sm font-semibold text-content">Privacy &amp; encryption</h2>
+            <p className="text-sm text-content-secondary">
+              Messages are end-to-end encrypted. Your encryption key is secured with your account
+              password and synced automatically across your devices when you sign in, so you can
+              read your conversations on any of them.
+            </p>
+          </section>
+
           {isElectron && (
             <section className="rounded-xl border border-edge bg-surface p-5 shadow-panel">
               <h2 className="mb-3 text-sm font-semibold text-content">Updates</h2>

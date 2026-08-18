@@ -111,3 +111,56 @@ export function decodeKey(value: string): JsonWebKey {
   const json = new TextDecoder().decode(fromBase64(value));
   return JSON.parse(json) as JsonWebKey;
 }
+
+// Derives the public key portion (x, y) from an ECDH private JWK. EC private
+// JWKs carry the public point, so no crypto operation is required.
+export function publicFromPrivate(privateJwk: JsonWebKey): JsonWebKey {
+  return { kty: privateJwk.kty, crv: privateJwk.crv, x: privateJwk.x, y: privateJwk.y };
+}
+
+async function deriveBackupKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+  const base = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(passphrase),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    base,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+// Encrypts the private key so it can be stored server-side and recovered on
+// another device using the account password (PBKDF2 -> AES-GCM).
+export async function encryptKeyBackup(
+  privateJwk: JsonWebKey,
+  passphrase: string
+): Promise<{ cipher: string; salt: string }> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await deriveBackupKey(passphrase, salt);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plain = new TextEncoder().encode(JSON.stringify(privateJwk));
+  const cipherBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain);
+  const packed = new Uint8Array(iv.length + cipherBuf.byteLength);
+  packed.set(iv, 0);
+  packed.set(new Uint8Array(cipherBuf), iv.length);
+  return { cipher: toBase64(packed.buffer), salt: toBase64(salt.buffer) };
+}
+
+export async function decryptKeyBackup(
+  cipher: string,
+  salt: string,
+  passphrase: string
+): Promise<JsonWebKey> {
+  const key = await deriveBackupKey(passphrase, fromBase64(salt));
+  const packed = fromBase64(cipher);
+  const iv = packed.slice(0, 12);
+  const data = packed.slice(12);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+  return JSON.parse(new TextDecoder().decode(plain)) as JsonWebKey;
+}
