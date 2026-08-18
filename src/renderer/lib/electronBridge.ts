@@ -76,6 +76,7 @@ function createFallback(): Api {
     },
     updates: {
       check: async () => false,
+      download: async () => false,
       install: async () => {}
     },
     window: {

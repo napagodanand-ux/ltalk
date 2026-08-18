@@ -28,6 +28,7 @@ declare global {
     };
     updates: {
       check: () => Promise<boolean>;
+      download: () => Promise<boolean>;
       install: () => Promise<void>;
     };
     window: {

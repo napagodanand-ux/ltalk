@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Moon, Sun, LogOut, RefreshCw, User, Bell } from 'lucide-react';
+import { Moon, Sun, LogOut, RefreshCw, User, Bell, Download } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -8,11 +8,6 @@ import { Button } from '../ui';
 import { ROUTES } from '../../lib/constants';
 import { notify, requestNotificationPermission } from '../../lib/notifications';
 import type { ThemeName } from '../../../../src/shared/types';
-
-interface UpdaterEvent {
-  event?: string;
-  payload?: unknown;
-}
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -22,13 +17,15 @@ export function SettingsPage() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
-  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [notifMsg, setNotifMsg] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [updateReady, setUpdateReady] = useState(false);
-  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+
+  // Shared update state lives in uiStore (driven by the splash/update-dialog
+  // flow in AppLayout) so the settings panel and the launch dialog stay in sync.
+  const updateAvailable = useUiStore((s) => s.updateAvailable);
+  const updateReady = useUiStore((s) => s.updateReady);
+  const updateProgress = useUiStore((s) => s.updateProgress);
 
   // The web build updates itself via GitHub Pages, so the desktop auto-updater
   // UI is irrelevant there.
@@ -38,56 +35,28 @@ export function SettingsPage() {
     window.electron.app.version().then(setAppVersion).catch(() => setAppVersion(null));
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = window.electron.on('updater:event', (...args: unknown[]) => {
-      const data = args[0] as UpdaterEvent | undefined;
-      const evt = data?.event;
-      const payload = data?.payload as { version?: string; percent?: number } | undefined;
-      if (evt === 'available') {
-        setUpdateReady(false);
-        setDownloadProgress(0);
-        setUpdateVersion(payload?.version ?? null);
-        setUpdateStatus('Update available');
-      } else if (evt === 'progress') {
-        setDownloadProgress(payload?.percent ?? 0);
-        setUpdateStatus('Downloading…');
-      } else if (evt === 'downloaded') {
-        setUpdateReady(true);
-        setDownloadProgress(100);
-        setUpdateStatus('Update ready to install');
-      } else if (evt === 'not-available') {
-        setUpdateReady(false);
-        setDownloadProgress(0);
-        setUpdateStatus('Up to date');
-      } else if (evt === 'checking') {
-        setUpdateStatus('Checking…');
-      } else if (evt === 'error') {
-        setUpdateReady(false);
-        setUpdateStatus(typeof data?.payload === 'string' ? data.payload : 'Update check failed');
-      }
-    });
-    return unsubscribe;
-  }, []);
-
   const handleCheckUpdates = async () => {
     setChecking(true);
-    setUpdateStatus(null);
-    setUpdateReady(false);
-    setDownloadProgress(0);
     try {
       await window.electron.updates.check();
-    } catch (err) {
-      setUpdateStatus(err instanceof Error ? err.message : 'Failed to check for updates');
+    } catch {
+      /* update check failure is non-fatal */
     } finally {
       setChecking(false);
     }
   };
 
-  const handleInstallUpdate = async () => {
-    try {
-      await window.electron.updates.install();
-    } catch {
-      /* ignored */
+  const handleUpdateAction = async () => {
+    if (!window.electron) return;
+    if (updateReady) {
+      try {
+        await window.electron.storage.delete('app.skippedUpdate');
+      } catch {
+        /* non-fatal */
+      }
+      void window.electron.updates.install();
+    } else {
+      void window.electron.updates.download();
     }
   };
 
@@ -186,36 +155,51 @@ export function SettingsPage() {
                   variant="outline"
                   className="flex h-8 items-center gap-2"
                   onClick={handleCheckUpdates}
-                  disabled={checking || updateReady}
+                  disabled={checking || (updateAvailable != null && !updateReady)}
                 >
                   <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
                   Check for updates
                 </Button>
-                {updateReady && (
-                  <Button className="flex h-8 items-center gap-2" onClick={handleInstallUpdate}>
-                    Install &amp; restart
+                {updateAvailable && (
+                  <Button
+                    className="flex h-8 items-center gap-2"
+                    onClick={handleUpdateAction}
+                  >
+                    {updateReady ? (
+                      <>
+                        <RefreshCw size={14} /> Install &amp; restart
+                      </>
+                    ) : (
+                      <>
+                        <Download size={14} /> Download &amp; update
+                      </>
+                    )}
                   </Button>
                 )}
               </div>
 
               {updateReady ? (
                 <p className="mt-2 text-xs text-content-secondary">
-                  Update ready{updateVersion ? ` (v${updateVersion})` : ''} — restart to apply.
+                  Update ready{updateAvailable ? ` (v${updateAvailable.version})` : ''} — restart to
+                  apply.
                 </p>
-              ) : downloadProgress > 0 && downloadProgress < 100 ? (
+              ) : updateProgress != null && updateProgress < 100 ? (
                 <div className="mt-3">
                   <div className="h-2 w-full overflow-hidden rounded-full bg-surface-hover">
                     <div
                       className="h-full rounded-full bg-primary transition-all duration-200"
-                      style={{ width: `${Math.round(downloadProgress)}%` }}
+                      style={{ width: `${Math.round(updateProgress)}%` }}
                     />
                   </div>
                   <p className="mt-1 text-xs text-content-secondary">
-                    Downloading… {Math.round(downloadProgress)}%
+                    Downloading… {Math.round(updateProgress)}%
                   </p>
                 </div>
-              ) : updateStatus ? (
-                <p className="mt-2 text-xs text-content-secondary">{updateStatus}</p>
+              ) : updateAvailable ? (
+                <p className="mt-2 text-xs text-content-secondary">
+                  Update available (v{updateAvailable.version})
+                  {updateAvailable.forced ? ' — required' : ''}.
+                </p>
               ) : null}
             </section>
           )}

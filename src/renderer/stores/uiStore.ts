@@ -14,6 +14,14 @@ interface UiState {
   forwardContent: string | null;
   online: boolean;
   setOnline: (value: boolean) => void;
+  splashVisible: boolean;
+  setSplashVisible: (value: boolean) => void;
+  updateAvailable: { version: string; forced: boolean } | null;
+  setUpdateAvailable: (value: { version: string; forced: boolean } | null) => void;
+  updateReady: boolean;
+  setUpdateReady: (value: boolean) => void;
+  updateProgress: number | null;
+  setUpdateProgress: (value: number | null) => void;
   setForwardContent: (content: string | null) => void;
   setTheme: (theme: ThemeName) => void;
   toggleTheme: () => void;
@@ -55,6 +63,10 @@ export const useUiStore = create<UiState>((set, get) => ({
   notifOnboarding: false,
   forwardContent: null,
   online: true,
+  splashVisible: true,
+  updateAvailable: null,
+  updateReady: false,
+  updateProgress: null,
   muted: [],
 
   setTheme: (theme) => {
@@ -75,6 +87,10 @@ export const useUiStore = create<UiState>((set, get) => ({
   setActivePanel: (panel) => set({ activePanel: panel }),
   setNotifOnboarding: (open) => set({ notifOnboarding: open }),
   setOnline: (value) => set({ online: value }),
+  setSplashVisible: (value) => set({ splashVisible: value }),
+  setUpdateAvailable: (value) => set({ updateAvailable: value }),
+  setUpdateReady: (value) => set({ updateReady: value }),
+  setUpdateProgress: (value) => set({ updateProgress: value }),
   setForwardContent: (content) => set({ forwardContent: content }),
 
   toggleMute: (conversationId) => {

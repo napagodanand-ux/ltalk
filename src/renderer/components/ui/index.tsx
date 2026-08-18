@@ -115,11 +115,13 @@ export const ModalClose = DialogPrimitive.Close;
 export function ModalContent({
   className,
   children,
-  title
+  title,
+  hideClose
 }: {
   className?: string;
   children: React.ReactNode;
   title?: string;
+  hideClose?: boolean;
 }) {
   return (
     <DialogPrimitive.Portal>
@@ -136,9 +138,11 @@ export function ModalContent({
           </DialogPrimitive.Title>
         )}
         {children}
-        <DialogPrimitive.Close className="absolute right-3 top-3 text-content-muted hover:text-content">
-          <X size={16} />
-        </DialogPrimitive.Close>
+        {!hideClose && (
+          <DialogPrimitive.Close className="absolute right-3 top-3 text-content-muted hover:text-content">
+            <X size={16} />
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );

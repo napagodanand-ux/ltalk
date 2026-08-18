@@ -32,6 +32,12 @@ function registerIpc(): void {
     return true;
   });
 
+  ipcMain.handle(IPC.updates.download, async () => {
+    const { downloadUpdate } = await import('./updater');
+    downloadUpdate();
+    return true;
+  });
+
   ipcMain.handle(IPC.updates.install, async () => {
     const { installUpdate } = await import('./updater');
     installUpdate();

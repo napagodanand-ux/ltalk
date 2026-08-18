@@ -29,6 +29,7 @@ export interface ElectronApi {
   };
   updates: {
     check: () => Promise<boolean>;
+    download: () => Promise<boolean>;
     install: () => Promise<void>;
   };
   window: {
@@ -80,6 +81,7 @@ const api: ElectronApi = {
   },
   updates: {
     check: () => ipcRenderer.invoke(IPC.updates.check),
+    download: () => ipcRenderer.invoke(IPC.updates.download),
     install: () => ipcRenderer.invoke(IPC.updates.install)
   },
   window: {

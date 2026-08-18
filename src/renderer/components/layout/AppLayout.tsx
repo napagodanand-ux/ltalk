@@ -18,7 +18,10 @@ import { Toaster } from '../Toaster';
 import { RestoreKeysModal } from '../auth/RestoreKeysModal';
 import { SearchModal } from '../chat/SearchModal';
 import { OfflineOverlay } from './OfflineOverlay';
+import { UpdateSplash } from './UpdateSplash';
+import { UpdateDialog } from './UpdateDialog';
 import { APP_MENU_CHANNELS } from '../../lib/constants';
+import { compareVersions } from '../../lib/helpers';
 
 export function AppLayout() {
   const navigate = useNavigate();
@@ -71,6 +74,96 @@ export function AppLayout() {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
       clearInterval(pingInterval);
+    };
+  }, []);
+
+  // Auto-updater: drive the launch splash and the update dialog. On launch the
+  // splash stays up until the first updater event (or a short timeout). When an
+  // update is available we decide forced-vs-optional: skipping records the
+  // version so the NEXT release is forced (skip-cascade), and a server-side
+  // minimum version can also force the update.
+  useEffect(() => {
+    const electron = window.electron;
+    if (!electron?.isElectron) {
+      useUiStore.getState().setSplashVisible(false);
+      return;
+    }
+    let splashHidden = false;
+    const hideSplash = () => {
+      if (!splashHidden) {
+        splashHidden = true;
+        useUiStore.getState().setSplashVisible(false);
+      }
+    };
+    const fallback = setTimeout(hideSplash, 4000);
+
+    let currentVersion = '';
+    void electron.app.version().then((v) => {
+      currentVersion = v;
+    });
+
+    let receivedEvent = false;
+    // The main process also checks on launch; if that completes before this
+    // listener attaches we'd miss it. Re-check shortly after mount so the
+    // splash/update dialog are driven reliably by an event we actually see.
+    const recheck = setTimeout(() => {
+      if (!receivedEvent) void electron.updates.check();
+    }, 1500);
+
+    const off = electron.on('updater:event', async (...args: unknown[]) => {
+      const data = args[0] as { event: string; payload: unknown };
+      const { event, payload } = data;
+      if (
+        ['checking', 'available', 'not-available', 'error', 'downloaded'].includes(event)
+      ) {
+        receivedEvent = true;
+        hideSplash();
+      }
+      if (event === 'available') {
+        const info = (payload ?? {}) as { version?: string };
+        const version = info.version ?? '';
+        let forced = false;
+        try {
+          const skipped = (await electron.storage.get('app.skippedUpdate')) as string | null;
+          if (skipped) forced = true;
+        } catch {
+          /* ignore */
+        }
+        try {
+          const policy = await fetch(
+            'https://napagodanand-ux.github.io/ltalk/update-policy.json',
+            { cache: 'no-store' }
+          ).then((r) => (r.ok ? r.json() : null));
+          if (policy?.minVersion && currentVersion && compareVersions(currentVersion, policy.minVersion) < 0) {
+            forced = true;
+          }
+        } catch {
+          /* offline / no policy — non-fatal */
+        }
+        useUiStore.getState().setUpdateAvailable({ version, forced });
+        if (forced) void electron.updates.download();
+      } else if (event === 'not-available') {
+        useUiStore.getState().setUpdateAvailable(null);
+      } else if (event === 'progress') {
+        const p = (payload ?? {}) as { percent?: number };
+        useUiStore.getState().setUpdateProgress(Math.round(p.percent ?? 0));
+      } else if (event === 'downloaded') {
+        const info = (payload ?? {}) as { version?: string };
+        useUiStore.getState().setUpdateReady(true);
+        useUiStore.getState().setUpdateProgress(100);
+        if (info?.version) {
+          const cur = useUiStore.getState().updateAvailable;
+          if (cur) useUiStore.getState().setUpdateAvailable({ ...cur, version: info.version });
+        }
+      } else if (event === 'error') {
+        useUiStore.getState().setUpdateProgress(null);
+      }
+    });
+
+    return () => {
+      clearTimeout(fallback);
+      clearTimeout(recheck);
+      off();
     };
   }, []);
 
@@ -276,6 +369,8 @@ export function AppLayout() {
       <RestoreKeysModal />
       <SearchModal />
       <OfflineOverlay />
+      <UpdateDialog />
+      <UpdateSplash />
     </div>
   );
 }

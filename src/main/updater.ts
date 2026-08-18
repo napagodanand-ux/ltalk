@@ -12,11 +12,11 @@ function notifyRenderer(event: string, payload: unknown): void {
 }
 
 export function initUpdater(): void {
-  // Download updates automatically once they're found (the UI then offers an
-  // "Install & restart" action). Without this, the app only ever reported
-  // "update available" and never fetched/installed anything.
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // We don't auto-download: optional updates wait for the user to accept, while
+  // forced updates are downloaded immediately by the renderer once it decides
+  // the update is mandatory (see the splash/update dialog flow).
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.logger = log;
 
   autoUpdater.on('checking-for-update', () => notifyRenderer('checking', null));
@@ -26,8 +26,7 @@ export function initUpdater(): void {
   autoUpdater.on('update-downloaded', (info) => notifyRenderer('downloaded', info));
   autoUpdater.on('error', (err) => notifyRenderer('error', err.message));
 
-  // Look for updates on launch so the download starts in the background and the
-  // user is prompted to restart once it's ready.
+  // Look for updates on launch so the user is prompted if one exists.
   checkForUpdates();
 
   log.info('Auto-updater initialized');
@@ -38,9 +37,11 @@ export function checkForUpdates(): void {
     log.info('Skipping update check in development');
     return;
   }
-  autoUpdater
-    .checkForUpdatesAndNotify()
-    .catch((error) => log.error('Update check failed', error));
+  autoUpdater.checkForUpdates().catch((error) => log.error('Update check failed', error));
+}
+
+export function downloadUpdate(): void {
+  autoUpdater.download().catch((error) => log.error('Update download failed', error));
 }
 
 export function installUpdate(): void {
