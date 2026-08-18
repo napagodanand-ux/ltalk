@@ -202,6 +202,48 @@ DROP POLICY IF EXISTS "Participants can delete messages" ON messages;
 CREATE POLICY "Participants can delete messages" ON messages FOR DELETE
 USING (is_participant(messages.conversation_id));
 
+-- Lets a participant mark the OTHER person's messages as read. The normal
+-- messages UPDATE policy only allows editing one's own rows (sender_id =
+-- auth.uid()), so a reader could never persist is_read on received messages —
+-- which made unread badges reappear after a refresh. This runs as SECURITY
+-- DEFINER and verifies the caller is both the reader and a participant before
+-- updating only the read-receipt columns.
+CREATE OR REPLACE FUNCTION mark_conversation_read(p_conversation_id uuid, p_reader uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_latest uuid;
+BEGIN
+  IF auth.uid() IS DISTINCT FROM p_reader THEN
+    RETURN;
+  END IF;
+  IF NOT is_participant(p_conversation_id) THEN
+    RETURN;
+  END IF;
+
+  UPDATE messages
+    SET is_read = true, read_at = now()
+    WHERE conversation_id = p_conversation_id
+      AND sender_id <> p_reader;
+
+  SELECT id INTO v_latest
+    FROM messages
+    WHERE conversation_id = p_conversation_id
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1;
+
+  UPDATE conversation_participants
+    SET last_read_message_id = v_latest
+    WHERE conversation_id = p_conversation_id
+      AND user_id = p_reader;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION mark_conversation_read(uuid, uuid) TO authenticated, anon;
+
 -- Per-user "delete for me": a row here means the given user has hidden the
 -- given message on their side only. It never affects the other participant,
 -- unlike deleting the message row itself.

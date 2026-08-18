@@ -57,9 +57,11 @@ export interface ElectronApi {
     block: (targetUserId: string) => Promise<boolean>;
   };
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
+  isElectron: boolean;
 }
 
 const api: ElectronApi = {
+  isElectron: true,
   auth: {
     signUp: (payload) => ipcRenderer.invoke(IPC.auth.signUp, payload),
     signIn: (payload) => ipcRenderer.invoke(IPC.auth.signIn, payload),

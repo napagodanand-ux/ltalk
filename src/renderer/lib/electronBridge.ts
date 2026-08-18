@@ -22,6 +22,7 @@ function createFallback(): Api {
   };
 
   return {
+    isElectron: false,
     auth: {
       signUp: async (payload) => {
         const { data, error } = await supabase.auth.signUp({
@@ -110,11 +111,16 @@ function createFallback(): Api {
           .eq('conversation_id', conversationId);
         return true;
       },
-      markRead: async (_conversationId) => {
-        await supabase
-          .from('messages')
-          .update({ is_read: true })
-          .eq('conversation_id', _conversationId);
+      markRead: async (conversationId) => {
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+        if (!user) return false;
+        const { error } = await supabase.rpc('mark_conversation_read', {
+          p_conversation_id: conversationId,
+          p_reader: user.id
+        });
+        if (error) return false;
         return true;
       }
     },

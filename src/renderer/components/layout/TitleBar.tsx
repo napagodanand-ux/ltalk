@@ -10,6 +10,8 @@ export function TitleBar() {
   const toggleTheme = useUiStore((s) => s.toggleTheme);
   const setNewConversationOpen = useUiStore((s) => s.setNewConversationOpen);
 
+  const isElectron = typeof window !== 'undefined' && window.electron?.isElectron === true;
+
   return (
     <div className="flex h-10 shrink-0 items-center justify-between border-b border-edge bg-bg-secondary px-3">
       <div className="flex items-center gap-2">
@@ -37,15 +39,19 @@ export function TitleBar() {
         <IconButton label={theme === 'dark' ? 'Light theme' : 'Dark theme'} onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </IconButton>
-        <IconButton label="Minimize" onClick={() => window.electron.window.minimize()}>
-          <Minus size={16} />
-        </IconButton>
-        <IconButton label="Maximize" onClick={() => window.electron.window.maximize()}>
-          <Square size={14} />
-        </IconButton>
-        <IconButton label="Close" onClick={() => window.electron.window.close()}>
-          <X size={16} />
-        </IconButton>
+        {isElectron && (
+          <>
+            <IconButton label="Minimize" onClick={() => window.electron.window.minimize()}>
+              <Minus size={16} />
+            </IconButton>
+            <IconButton label="Maximize" onClick={() => window.electron.window.maximize()}>
+              <Square size={14} />
+            </IconButton>
+            <IconButton label="Close" onClick={() => window.electron.window.close()}>
+              <X size={16} />
+            </IconButton>
+          </>
+        )}
       </div>
     </div>
   );

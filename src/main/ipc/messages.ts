@@ -24,30 +24,23 @@ export function registerMessageHandlers(): void {
 
   ipcMain.handle(
     `${MESSAGES_CHANNEL}:markRead`,
-    async (_event: IpcMainInvokeEvent, conversationId: string, upToMessageId: string) => {
+    async (_event: IpcMainInvokeEvent, conversationId: string, _upToMessageId: string) => {
       const {
         data: { user }
       } = await authSupabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { error: msgError } = await authSupabase
-        .from('messages')
-        .update({ is_read: true, read_at: new Date().toISOString() })
-        .eq('conversation_id', conversationId)
-        .neq('sender_id', user.id);
-      if (msgError) {
-        log.error('markRead failed', msgError.message);
-        throw new Error(msgError.message);
-      }
-
-      const { error: partError } = await authSupabase
-        .from('conversation_participants')
-        .update({ last_read_message_id: upToMessageId })
-        .eq('conversation_id', conversationId)
-        .eq('user_id', user.id);
-      if (partError) {
-        log.error('markRead participants failed', partError.message);
-        throw new Error(partError.message);
+      // mark_conversation_read is SECURITY DEFINER: it lets a participant set
+      // is_read on messages sent by the other person (the normal UPDATE policy
+      // only allows editing one's own rows). This is what makes read receipts
+      // persist across refreshes.
+      const { error } = await authSupabase.rpc('mark_conversation_read', {
+        p_conversation_id: conversationId,
+        p_reader: user.id
+      });
+      if (error) {
+        log.error('markRead failed', error.message);
+        throw new Error(error.message);
       }
       return true;
     }
