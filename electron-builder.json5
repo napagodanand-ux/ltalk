@@ -14,7 +14,10 @@
   win: {
     target: ['nsis'],
     icon: 'assets/icons/icon.ico',
-    publisherName: 'LTalk'
+    publisherName: 'LTalk',
+    signingHashAlgorithms: ['sha256'],
+    timeStampServer: 'http://timestamp.digicert.com',
+    timeStampServerDigestAlgorithm: 'sha256'
   },
   linux: {
     target: ['AppImage', 'deb'],
