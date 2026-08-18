@@ -21,7 +21,7 @@ interface ConversationState {
   remove: (id: string) => void;
   getById: (id: string) => ConversationView | undefined;
   applyIncoming: (conversationId: string, message: Message) => void;
-  updateLastMessage: (conversationId: string, message: Message) => void;
+  updateLastMessage: (conversationId: string, message: Message | null) => void;
   clearLastMessageIfMatch: (conversationId: string, messageId: string) => void;
   updateParticipantProfile: (profile: Profile) => void;
 }

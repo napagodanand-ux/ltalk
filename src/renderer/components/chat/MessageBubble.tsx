@@ -46,6 +46,7 @@ export function MessageBubble({
   const activeId = useConversationStore((s) => s.activeId);
   const conversation = useConversationStore((s) => (activeId ? s.getById(activeId) : undefined));
   const reactions = useMessageStore((s) => s.reactionsByMessage[message.id]);
+  const deletedForMe = useMessageStore((s) => s.deletedForMe.includes(message.id));
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content ?? '');
@@ -237,9 +238,11 @@ export function MessageBubble({
               <Forward size={14} /> Forward
             </ContextMenuItem>
           )}
-          <ContextMenuItem onSelect={() => void useMessageStore.getState().hideForMe(message.id)}>
-            <Trash2 size={14} /> Delete for me
-          </ContextMenuItem>
+          {!deletedForMe && (
+            <ContextMenuItem onSelect={() => void useMessageStore.getState().hideForMe(message.id)}>
+              <Trash2 size={14} /> Delete for me
+            </ContextMenuItem>
+          )}
           {isOwn && (
             <ContextMenuItem
               onSelect={() => {

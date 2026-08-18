@@ -374,6 +374,15 @@ export const useMessageStore = create<MessageState>((set, get) => ({
 
   hideForMe: async (messageId) => {
     if (get().deletedForMe.includes(messageId)) return;
+    // Find which conversation held this message so we can fix its sidebar
+    // preview (and avoid the deleted text lingering in the last-message line).
+    let affectedCid: string | null = null;
+    for (const [cid, list] of Object.entries(get().byConversation)) {
+      if (list.some((m) => m.id === messageId)) {
+        affectedCid = cid;
+        break;
+      }
+    }
     // Optimistically hide locally while the server records it account-wide.
     const hidden = [...get().deletedForMe, messageId];
     set((state) => {
@@ -383,6 +392,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       }
       return { deletedForMe: hidden, byConversation };
     });
+    if (affectedCid) {
+      const remaining = get().byConversation[affectedCid];
+      const newLast = remaining.length ? remaining[remaining.length - 1] : null;
+      useConversationStore.getState().updateLastMessage(affectedCid, newLast);
+    }
     try {
       await messageApi.hideMessageForMe(messageId);
     } catch {
