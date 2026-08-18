@@ -16,6 +16,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { updatePresence } from '../../lib/api/profile';
 import { Toaster } from '../Toaster';
 import { RestoreKeysModal } from '../auth/RestoreKeysModal';
+import { SearchModal } from '../chat/SearchModal';
 import { APP_MENU_CHANNELS } from '../../lib/constants';
 
 export function AppLayout() {
@@ -235,6 +236,7 @@ export function AppLayout() {
       <NotificationOnboarding />
       <Toaster />
       <RestoreKeysModal />
+      <SearchModal />
     </div>
   );
 }
