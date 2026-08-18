@@ -40,6 +40,36 @@ function publicMatches(privateJwk: JsonWebKey, publicB64: string | null): boolea
   }
 }
 
+// The web "secure" store is shared localStorage keyed by a fixed name, so two
+// accounts in one browser would overwrite each other's private key on
+// session-restore and decrypt every conversation as "🔒 Encrypted message".
+// Namespace the stored key per user id. The unscoped name is kept as a
+// one-time fallback so existing web clients migrate automatically.
+async function readStoredKey(userId: string, publicKey: string | null): Promise<string | null> {
+  const scoped = await window.electron.secure.getKey('privateKey_' + userId);
+  if (scoped) return scoped;
+  // One-time migration from the old unscoped name. Only adopt it if it actually
+  // belongs to this account — otherwise it's a leftover from another account in
+  // this shared browser and must be ignored (the caller will restore instead).
+  const legacy = await window.electron.secure.getKey('privateKey');
+  if (legacy) {
+    try {
+      const priv = decodeKey(legacy);
+      if (publicMatches(priv, publicKey)) {
+        await window.electron.secure.storeKey('privateKey_' + userId, legacy);
+        return legacy;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+async function writeStoredKey(userId: string, value: string): Promise<void> {
+  await window.electron.secure.storeKey('privateKey_' + userId, value);
+}
+
 // Resolves this device's E2EE private key:
 //   1. reuse the locally stored key when it matches the canonical public key;
 //   2. otherwise recover it from the password-encrypted backup (when we have
@@ -53,7 +83,7 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
   const hasBackup = Boolean(cipher && salt);
 
   // 1) Reuse the locally stored key when it matches the canonical public key.
-  const stored = await window.electron.secure.getKey('privateKey');
+  const stored = await readStoredKey(profile.id, profile.public_key);
   if (stored) {
     try {
       const priv = decodeKey(stored);
@@ -77,7 +107,7 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
     try {
       const priv = await decryptKeyBackup(cipher, salt, password);
       setPrivateKey(priv);
-      await window.electron.secure.storeKey('privateKey', encodeKey(priv));
+      await writeStoredKey(profile.id, encodeKey(priv));
       const pub = encodeKey(publicFromPrivate(priv));
       if (pub !== profile.public_key) {
         await updateProfile(profile.id, { public_key: pub });
@@ -95,7 +125,7 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
   if (!hasBackup) {
     const pair = await generateKeyPair();
     setPrivateKey(pair.privateKeyJwk);
-    await window.electron.secure.storeKey('privateKey', encodeKey(pair.privateKeyJwk));
+    await writeStoredKey(profile.id, encodeKey(pair.privateKeyJwk));
     const updates: Partial<Profile> = { public_key: encodeKey(pair.publicKeyJwk) };
     if (password) {
       const backup = await encryptKeyBackup(pair.privateKeyJwk, password);
@@ -179,8 +209,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    const id = get().user?.id ?? get().profile?.id;
     await authApi.signOut();
     clearPrivateKey();
+    if (id) {
+      try {
+        await window.electron.storage.delete('secure.privateKey_' + id);
+      } catch {
+        /* ignore */
+      }
+    }
     set({ user: null, session: null, profile: null, pendingRestore: false, restoreError: null });
   },
 
@@ -202,7 +240,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const priv = await decryptKeyBackup(profile.key_backup_cipher, profile.key_backup_salt, password);
       setPrivateKey(priv);
-      await window.electron.secure.storeKey('privateKey', encodeKey(priv));
+      await writeStoredKey(profile.id, encodeKey(priv));
       // The backup is authoritative: re-publish its public key so a drifted
       // registered key is repaired and conversations become readable again.
       const pub = encodeKey(publicFromPrivate(priv));

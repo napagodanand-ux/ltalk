@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Lock } from 'lucide-react';
 
 import { useAuthStore } from '../../stores/authStore';
+import { useConversationStore } from '../../stores/conversationStore';
+import { useMessageStore } from '../../stores/messageStore';
 import { Button, Input } from '../ui';
 
 export function RestoreKeysModal() {
@@ -18,7 +20,14 @@ export function RestoreKeysModal() {
     setBusy(true);
     const ok = await restore(password);
     setBusy(false);
-    if (ok) setPassword('');
+    if (ok) {
+      setPassword('');
+      // The key just became available, but messages already loaded were
+      // decrypted before it existed and are cached as "🔒 Encrypted message".
+      // Re-decrypt the open conversation so it reflects the restored key.
+      const activeId = useConversationStore.getState().activeId;
+      if (activeId) await useMessageStore.getState().load(activeId);
+    }
   };
 
   return (
