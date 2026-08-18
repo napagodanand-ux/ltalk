@@ -1,7 +1,7 @@
 # LTalk
 
 ![Build](https://github.com/napagodanand-ux/ltalk/actions/workflows/build.yml/badge.svg)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-Proprietary-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 
 > **Secure, end-to-end encrypted desktop messaging.**
@@ -47,7 +47,7 @@ The same client also runs as a web app (which updates live, so it is not version
 ### General
 - **Internet connection** — LTalk is a client for a hosted Supabase backend; realtime messaging, presence, media storage, and updates all require network access.
 - **Account** — sign up inside the app. End users do **not** need to set up or host any server.
-- **Open source** — released under the MIT license; the full source is on GitHub and contributions are welcome.
+- **Free to use** — free for personal, non-commercial use under the LTalk Free License; the full source is on GitHub.
 
 ### Windows
 - **OS:** Windows 10 or Windows 11, **64-bit (x86_64)**.
@@ -165,4 +165,4 @@ supabase/      Database schema (single source of truth)
 
 ## 📄 License
 
-[MIT](LICENSE) © LTalk
+[LTalk Free License](LICENSE) © 2026 LTalk — free for personal use, not open source.

@@ -1,7 +1,7 @@
 {
   appId: 'com.ltalk.app',
   productName: 'LTalk',
-  copyright: 'Copyright © 2024 LTalk',
+  copyright: 'Copyright © 2026 LTalk',
   directories: {
     output: 'release',
     buildResources: 'assets'

@@ -1,21 +1,58 @@
-MIT License
+LTalk Free License
+====================
 
-Copyright (c) 2024 LTalk
+Copyright (c) 2026 LTalk. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Grant of License
+LTalk (the "Software") is provided free of charge for personal,
+non-commercial use. You are granted a non-exclusive, non-transferable,
+and revocable license to download, install, and use the Software on your
+own devices for personal purposes.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. Restrictions
+Except as expressly permitted above, you may NOT, without the prior
+written permission of the copyright holder:
+  (a) copy, reproduce, redistribute, republish, or sublicense the
+      Software or any part of it;
+  (b) modify, adapt, translate, or create derivative works based on the
+      Software;
+  (c) reverse engineer, decompile, or disassemble the Software, except to
+      the limited extent such activity is expressly permitted by
+      applicable law;
+  (d) remove, obscure, or alter any proprietary notices, labels,
+      trademarks, or copyright markings; or
+  (e) use the Software for any commercial purpose or to provide services
+      to third parties.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. Not Open Source
+This Software is NOT open source. The source code is not licensed for use,
+modification, or distribution. The permissions granted by this license are
+limited to using the provided compiled application and do not grant any
+rights typically associated with open-source software.
+
+4. Ownership
+The Software and all intellectual property rights therein remain the
+exclusive property of LTalk. This license does not transfer any ownership
+rights to you.
+
+5. Termination
+This license is effective until terminated. Your rights under this license
+will terminate automatically without notice if you fail to comply with any
+term. Upon termination you must cease all use of the Software and delete
+all copies in your possession.
+
+6. Disclaimer of Warranty
+The Software is provided "AS IS", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose, and non-infringement. Use is at your own
+risk.
+
+7. Limitation of Liability
+In no event shall LTalk be liable for any direct, indirect, incidental,
+special, consequential, or exemplary damages arising out of or in
+connection with the use of or inability to use the Software.
+
+8. Changes to Terms
+LTalk reserves the right to modify the terms of this license at any time.
+Continued use of the Software after any changes constitutes acceptance of
+the new terms.

@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/napagodanand-ux/ltalk.git"
   },
-  "license": "MIT",
+  "license": "LicenseRef-LTalk",
   "main": "out/main/index.js",
   "private": true,
   "scripts": {
