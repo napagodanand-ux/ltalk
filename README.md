@@ -42,6 +42,40 @@ The same client also runs as a web app (which updates live, so it is not version
 - Supabase Row Level Security (RLS) enforces per-user data isolation on every table.
 - Private keys never leave the device and are stored in the OS credential store.
 
+## 💻 Requirements
+
+### General
+- **Internet connection** — LTalk is a client for a hosted Supabase backend; realtime messaging, presence, media storage, and updates all require network access.
+- **Account** — sign up inside the app. End users do **not** need to set up or host any server.
+- **Open source** — released under the MIT license; the full source is on GitHub and contributions are welcome.
+
+### Windows
+- **OS:** Windows 10 or Windows 11, **64-bit (x86_64)**.
+- **Disk:** ~600 MB free (Electron apps are large, plus cache and downloaded media).
+- **Privileges:** a standard user account is enough — the installer is per-user and does **not** require administrator rights.
+- **Code signing:** published builds are currently unsigned until a certificate is added, so Windows SmartScreen may warn on first launch. Click **More info → Run anyway**, or install a signed build (see `docs/SIGNING.md`).
+
+### Linux
+- **Architecture:** 64-bit **x86_64**.
+- **Distributions:** any current desktop distro with a recent `glibc` — e.g. **Ubuntu 20.04+**, **Debian 11+**, **Linux Mint 20+**, **Fedora 35+**, **Arch Linux** (rolling).
+- **AppImage:** needs **FUSE 2** (`libfuse2`). If you see `dlopen(): error loading libfuse.so.2`, install it (`sudo apt install libfuse2`), run with `APPIMAGE_EXTRACT_AND_RUN=1 ./LTalk-*.AppImage`, or use the `.deb`.
+- **Debian / Ubuntu & derivatives:** install the `.deb` with `sudo dpkg -i ltalk_*.deb` (no FUSE required).
+- **Arch / Manjaro:** use the AppImage (with FUSE 2) or build from source; there is no official `pacman` package yet.
+- **System libraries:** a normal desktop environment is assumed. Electron needs `libnss3`, `libgbm`, `libatk-1.0`, `libxkbcommon`, `libxcomposite`, `libxdamage`, `libxrandr`, `libpango`, `libasound2`, etc., which are present on standard desktop installs but may be missing on minimal/headless systems.
+
+### Hardware (all platforms)
+- **CPU:** 64-bit processor (x86_64). ARM64 is not part of the current builds.
+- **RAM:** 4 GB recommended (2 GB minimum — Electron/Chromium is memory-hungry).
+- **Storage:** ~600 MB–1 GB free for the app, cache, and downloaded media.
+- **Display:** any standard resolution.
+- **Network:** broadband recommended for media and realtime; the app auto-updates over HTTPS.
+
+### الزامات سیستم (فارسی)
+- **عمومی:** اتصال به اینترنت (برای سرور Supabase، پیام‌رسانی بلادرنگ، حضور، ذخیره‌سازی و به‌روزرسانی) و ثبت‌نام درون برنامه. نصب سرور لازم نیست. پروژه متن‌باز و تحت مجوز MIT است.
+- **ویندوز:** ویندوز ۱۰ یا ۱۱، ۶۴-بیت (x86_64)؛ حدود ۶۰۰ مگابایت فضای دیسک؛ نصب با حساب کاربری عادی و بدون نیاز به دسترسی مدیریت.
+- **لینوکس:** معماری ۶۴-بیت؛ توزیع‌های به‌روز دسکتاپ (اوبونتو، دبیان، فدورا، آرچ و…). برای AppImage به FUSE 2 نیاز است یا از بسته `.deb` استفاده کنید.
+- **سخت‌افزار:** پردازنده ۶۴-بیت، ۴ گیگابایت رم پیشنهادی (حداقل ۲ گیگابایت)، حدود ۱ گیگابایت فضای دیسک، و اینترنت پرسرعت.
+
 ## 📦 Installation
 
 Download the latest installer for your platform from the
