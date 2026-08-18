@@ -104,15 +104,13 @@ async function decryptIfNeeded(message: Message): Promise<Message> {
   const other = conversation?.participants.find((p) => p.id !== meId);
 
   let publicKey: JsonWebKey | null = other?.public_key ? safeParseKey(other.public_key) : null;
-  const pubSource = other?.public_key ? 'participant' : 'sender-fallback';
   if (!publicKey) publicKey = await getPublicKey(message.sender_id);
   if (!publicKey) return message;
 
   try {
     const plain = await decryptMessage(message.content, privateKey, publicKey);
     return { ...message, content: plain };
-  } catch (e) {
-    console.error('Failed to decrypt 1:1 message', message.id, (e as Error)?.message);
+  } catch {
     return { ...message, content: '🔒 Encrypted message' };
   }
 }
