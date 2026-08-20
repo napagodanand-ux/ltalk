@@ -41,7 +41,7 @@ export function checkForUpdates(): void {
 }
 
 export function downloadUpdate(): void {
-  autoUpdater.download().catch((error) => log.error('Update download failed', error));
+  autoUpdater.downloadUpdate().catch((error) => log.error('Update download failed', error));
 }
 
 export function installUpdate(): void {
