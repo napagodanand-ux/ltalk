@@ -18,19 +18,6 @@
   --lt-scrollbar: #cccccc;
   --lt-success: #25d366;
   --lt-online: #31a24c;
-
-  /* WhatsApp-style accents, used only on the mobile surfaces. */
-  --lt-wa-header: #008069;
-  --lt-wa-header-text: #ffffff;
-  --lt-wa-fab: #25d366;
-  --lt-wa-fab-text: #ffffff;
-  --lt-wa-own: #dcf8c6;
-  --lt-wa-own-text: #0b1f17;
-  --lt-wa-recv: #ffffff;
-  --lt-wa-recv-text: #111111;
-  --lt-wa-badge: #25d366;
-  --lt-wa-badge-text: #ffffff;
-  --lt-wa-preview: #667781;
 }
 
 [data-theme='dark'] {
@@ -48,16 +35,4 @@
   --lt-primary: #a02848;
   --lt-primary-light: #c03058;
   --lt-primary-dark: #801830;
-
-  --lt-wa-header: #1f2c34;
-  --lt-wa-header-text: #e9edf0;
-  --lt-wa-fab: #00a884;
-  --lt-wa-fab-text: #ffffff;
-  --lt-wa-own: #005c4b;
-  --lt-wa-own-text: #e9fffb;
-  --lt-wa-recv: #202c33;
-  --lt-wa-recv-text: #e8e8e8;
-  --lt-wa-badge: #00a884;
-  --lt-wa-badge-text: #ffffff;
-  --lt-wa-preview: #8696a0;
 }
