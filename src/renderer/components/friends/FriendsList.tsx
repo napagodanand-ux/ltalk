@@ -1,5 +1,5 @@
 import { Check, X, Eye, UserX, UserMinus, MessageCircle, Search, UserPlus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useFriendStore } from '../../stores/friendStore';
@@ -31,8 +31,8 @@ export function FriendsList() {
   const [addLoading, setAddLoading] = useState(false);
   const [requested, setRequested] = useState<Record<string, boolean>>({});
 
-  const runAddSearch = debounce((q: string) => {
-    void (async () => {
+  const runAddSearch = useCallback(
+    async (q: string) => {
       if (!q.trim()) {
         setAddResults([]);
         return;
@@ -48,12 +48,15 @@ export function FriendsList() {
       } finally {
         setAddLoading(false);
       }
-    })();
-  }, 300);
+    },
+    [friends, pending]
+  );
+
+  const debouncedSearch = useMemo(() => debounce((q: string) => void runAddSearch(q), 300), [runAddSearch]);
 
   useEffect(() => {
-    runAddSearch(addQuery);
-  }, [addQuery, runAddSearch]);
+    debouncedSearch(addQuery);
+  }, [addQuery, debouncedSearch]);
 
   // Opens (or creates) a 1:1 conversation with a friend and jumps to the chat.
   const openChat = async (friend: Profile) => {
