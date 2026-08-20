@@ -32,11 +32,18 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
 
   return (
     <div className="flex items-center gap-3 border-b border-edge bg-bg-secondary px-4 py-2.5">
-      <Avatar src={avatarSrc} name={title} size={36} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-content">{title}</div>
-        <div className="truncate text-xs text-content-muted">{subtitle}</div>
-      </div>
+      <button
+        type="button"
+        className="flex min-w-0 items-center gap-3"
+        onClick={() => setRightPanel(!rightPanelOpen)}
+        title="View details"
+      >
+        <Avatar src={avatarSrc} name={title} size={36} />
+        <div className="min-w-0 flex-1 text-left">
+          <div className="truncate text-sm font-semibold text-content">{title}</div>
+          <div className="truncate text-xs text-content-muted">{subtitle}</div>
+        </div>
+      </button>
       <IconButton label="Search" className="ml-auto">
         <Search size={18} />
       </IconButton>

@@ -10,8 +10,8 @@ import { useMessageStore } from '../../stores/messageStore';
 import {
   Avatar,
   IconButton,
-  ContextMenu,
-  ContextMenuItem,
+  DropdownMenu,
+  DropdownMenuItem,
   Toast,
   ToastProvider,
   ToastViewport,
@@ -263,20 +263,20 @@ export default function RightPanel() {
           </div>
         ) : (
           other && (
-            <ContextMenu
+            <DropdownMenu
               trigger={
                 <button className="flex w-full items-center justify-center gap-2 rounded-md border border-edge px-3 py-2 text-sm text-content hover:bg-surface-hover">
                   Options
                 </button>
               }
             >
-              <ContextMenuItem onSelect={() => void handleBlock(other.id)}>
+              <DropdownMenuItem onSelect={() => void handleBlock(other.id)}>
                 <UserX size={14} /> Block
-              </ContextMenuItem>
-              <ContextMenuItem onSelect={() => void handleClearChat()}>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void handleClearChat()}>
                 <Eraser size={14} /> Clear chat
-              </ContextMenuItem>
-            </ContextMenu>
+              </DropdownMenuItem>
+            </DropdownMenu>
           )
         )}
       </div>

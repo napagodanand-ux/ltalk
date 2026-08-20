@@ -182,6 +182,82 @@ export function ContextMenuItem({
   );
 }
 
+// Click-triggered dropdown menu (as opposed to ContextMenu, which only opens on
+// right-click). Used for "Options"-style buttons where a left-click should open
+// the menu.
+export function DropdownMenu({
+  trigger,
+  children
+}: {
+  trigger: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDocDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <div
+        className="w-full"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        {trigger}
+      </div>
+      {open && (
+        <div className="absolute left-0 z-50 mt-1 min-w-[180px] rounded-md border border-edge bg-surface p-1 shadow-panel">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DropdownMenuItem({
+  className,
+  onSelect,
+  children,
+  ...props
+}: { className?: string; onSelect?: () => void; children?: React.ReactNode } & Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  'onSelect'
+>) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect?.();
+      }}
+      className={cn(
+        'flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-content outline-none hover:bg-surface-hover',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function Tooltip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <TooltipPrimitive.Provider delayDuration={300}>
