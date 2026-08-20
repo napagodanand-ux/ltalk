@@ -109,4 +109,45 @@
     background-color: var(--lt-surface-hover);
     color: var(--lt-text);
   }
+
+  /* WhatsApp-style mobile accents. These classes are only applied to elements
+     that are themselves only rendered on small screens, so the desktop UI is
+     untouched. */
+  .wa-header {
+    background-color: var(--lt-wa-header);
+    color: var(--lt-wa-header-text);
+  }
+  .wa-header button {
+    color: var(--lt-wa-header-text);
+  }
+  .wa-header button:hover {
+    color: var(--lt-wa-header-text);
+  }
+  .wa-header input {
+    background-color: rgba(255, 255, 255, 0.16);
+    color: var(--lt-wa-header-text);
+  }
+  .wa-fab {
+    background-color: var(--lt-wa-fab);
+    color: var(--lt-wa-fab-text);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+  .wa-fab:hover {
+    filter: brightness(1.05);
+  }
+  .wa-bubble-own {
+    background-color: var(--lt-wa-own);
+    color: var(--lt-wa-own-text);
+  }
+  .wa-bubble-recv {
+    background-color: var(--lt-wa-recv);
+    color: var(--lt-wa-recv-text);
+  }
+  .wa-badge {
+    background-color: var(--lt-wa-badge);
+    color: var(--lt-wa-badge-text);
+  }
+  .wa-preview {
+    color: var(--lt-wa-preview);
+  }
 }

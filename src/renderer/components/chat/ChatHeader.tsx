@@ -4,7 +4,7 @@ import { Info, Search, ArrowLeft } from 'lucide-react';
 import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useConversationStore } from '../../stores/conversationStore';
-import { effectiveStatus } from '../../lib/helpers';
+import { effectiveStatus, cn } from '../../lib/helpers';
 import { useIsMobile } from '../../lib/hooks';
 import type { ConversationView } from '../../stores/conversationStore';
 
@@ -16,6 +16,7 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
   const user = useAuthStore((s) => s.user);
   const setRightPanel = useUiStore((s) => s.setRightPanel);
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
+  const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const select = useConversationStore((s) => s.select);
   const isMobile = useIsMobile();
 
@@ -35,10 +36,15 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
       : 'Offline';
 
   return (
-    <div className="flex items-center gap-3 border-b border-edge bg-bg-secondary px-4 py-2.5">
+    <div
+      className={cn(
+        'flex items-center gap-3 border-b border-edge bg-bg-secondary px-4 py-2.5',
+        isMobile && 'wa-header border-transparent px-3 py-2.5'
+      )}
+    >
       {isMobile && (
         <IconButton label="Back" className="-ml-1" onClick={() => select(null)}>
-          <ArrowLeft size={20} />
+          <ArrowLeft size={22} />
         </IconButton>
       )}
       <button
@@ -49,11 +55,25 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
       >
         <Avatar src={avatarSrc} name={title} size={36} />
         <div className="min-w-0 flex-1 text-left">
-          <div className="truncate text-sm font-semibold text-content">{title}</div>
-          <div className="truncate text-xs text-content-muted">{subtitle}</div>
+          <div
+            className={cn(
+              'truncate text-sm font-semibold text-content',
+              isMobile && 'text-white'
+            )}
+          >
+            {title}
+          </div>
+          <div
+            className={cn(
+              'truncate text-xs text-content-muted',
+              isMobile && 'text-white/80'
+            )}
+          >
+            {subtitle}
+          </div>
         </div>
       </button>
-      <IconButton label="Search" className="ml-auto">
+      <IconButton label="Search" className="ml-auto" onClick={() => setSearchOpen(true)}>
         <Search size={18} />
       </IconButton>
       <IconButton

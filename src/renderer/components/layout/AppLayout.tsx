@@ -386,7 +386,7 @@ export function AppLayout() {
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <TitleBar />
+      {!isMobile && <TitleBar />}
       <div className="flex min-h-0 flex-1">
         <Sidebar
           className={cn(

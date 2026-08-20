@@ -11,6 +11,7 @@ import { useToastStore } from '../../stores/toastStore';
 import { uploadMedia } from '../../lib/api/messages';
 import { supabase } from '../../lib/supabase';
 import { cn } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 
 function deriveType(mime: string): MessageType {
   if (mime.startsWith('image/')) return 'image';
@@ -83,6 +84,7 @@ export function MessageInput({
   onClearReply?: () => void;
   disabled?: boolean;
 }) {
+  const isMobile = useIsMobile();
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -269,18 +271,38 @@ export function MessageInput({
 
           <EmojiPicker onSelect={insertEmoji} label="Insert emoji" align="right" disabled={disabled} />
 
-          <IconButton label="Record voice message" onClick={() => void startRecording()} disabled={disabled}>
-            <Mic size={18} />
-          </IconButton>
+          {!isMobile && (
+            <IconButton label="Record voice message" onClick={() => void startRecording()} disabled={disabled}>
+              <Mic size={18} />
+            </IconButton>
+          )}
 
-          <IconButton
-            label="Send"
-            onClick={() => void handleSend()}
-            disabled={disabled || !text.trim()}
-            className="bg-primary text-white hover:bg-primary-hover"
-          >
-            <Send size={18} />
-          </IconButton>
+          {!isMobile && (
+            <IconButton
+              label="Send"
+              onClick={() => void handleSend()}
+              disabled={disabled || !text.trim()}
+              className="bg-primary text-white hover:bg-primary-hover"
+            >
+              <Send size={18} />
+            </IconButton>
+          )}
+
+          {isMobile &&
+            (text.trim() ? (
+              <IconButton
+                label="Send"
+                onClick={() => void handleSend()}
+                disabled={disabled}
+                className="bg-primary text-white hover:bg-primary-hover"
+              >
+                <Send size={18} />
+              </IconButton>
+            ) : (
+              <IconButton label="Record voice message" onClick={() => void startRecording()} disabled={disabled}>
+                <Mic size={18} />
+              </IconButton>
+            ))}
         </div>
       )}
       {uploading && (

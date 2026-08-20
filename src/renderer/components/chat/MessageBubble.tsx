@@ -14,6 +14,7 @@ import {
 import type { Message } from '../../../../src/shared/types';
 
 import { formatFileSize, formatTimestamp, cn } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 import { EmojiPanel } from '../ui/EmojiPicker';
 import { useMessageStore } from '../../stores/messageStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -53,6 +54,7 @@ export function MessageBubble({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const deleted = message.type === 'text' && message.content === null;
+  const isMobile = useIsMobile();
   const isAttachment = message.type !== 'text' && Boolean(message.file_url);
 
   const isGroup = conversation?.is_group;
@@ -130,8 +132,14 @@ export function MessageBubble({
   const bubble = (
     <div
       className={cn(
-        'max-w-[70%] rounded-lg px-3 py-2 text-sm',
-        isOwn ? 'bg-primary text-white' : 'bg-surface-hover text-content'
+        'max-w-[75%] rounded-lg px-3 py-2 text-sm',
+        isMobile
+          ? isOwn
+            ? 'wa-bubble-own'
+            : 'wa-bubble-recv'
+          : isOwn
+            ? 'bg-primary text-white'
+            : 'bg-surface-hover text-content'
       )}
     >
       {isGroup && !isOwn && senderName && (

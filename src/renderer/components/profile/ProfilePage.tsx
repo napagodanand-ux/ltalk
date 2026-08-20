@@ -6,6 +6,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { uploadAvatar, updateProfile } from '../../lib/api/profiles';
 import { Avatar, Button, IconButton, Input, Textarea, Spinner, Toast, ToastProvider, ToastViewport } from '../ui';
 import { ROUTES } from '../../lib/constants';
+import { cn } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 
 export function ProfilePage() {
   const navigate = useNavigate();
@@ -20,6 +22,7 @@ export function ProfilePage() {
   const [toastOpen, setToastOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
 
   if (!user || !profile) {
     return (
@@ -59,11 +62,23 @@ export function ProfilePage() {
   return (
     <div className="h-full overflow-y-auto bg-bg">
       <div className="mx-auto max-w-[560px] p-6">
-        <div className="mb-4 flex items-center gap-2">
+        <div
+          className={cn(
+            'mb-4 flex items-center gap-2',
+            isMobile && 'wa-header -mx-6 -mt-6 mb-4 px-4 py-3'
+          )}
+        >
           <IconButton label="Back" onClick={() => navigate(ROUTES.app)}>
             <ArrowLeft size={18} />
           </IconButton>
-          <h1 className="text-base font-semibold text-content">Profile</h1>
+          <h1
+            className={cn(
+              'text-base font-semibold text-content',
+              isMobile && 'text-white'
+            )}
+          >
+            Profile
+          </h1>
         </div>
 
         <div className="rounded-xl border border-edge bg-surface p-6 shadow-panel">

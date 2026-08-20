@@ -5,6 +5,7 @@ import { useMessageStore } from '../../stores/messageStore';
 import { useUiStore } from '../../stores/uiStore';
 import { Avatar, ContextMenu, ContextMenuItem } from '../ui';
 import { cn, formatTimestamp, messagePreview, effectiveStatus } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 import { deleteConversation } from '../../lib/api/conversations';
 
 function trailingVoiceCount(conversation: ConversationView): number {
@@ -47,6 +48,7 @@ export function ConversationItem({
     : other?.display_name || other?.username || 'Unknown';
 
   const isActive = activeId === conversation.id;
+  const isMobile = useIsMobile();
 
   const subtitle = isGroup
     ? `${conversation.participants.length} members`
@@ -80,7 +82,12 @@ export function ConversationItem({
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-xs text-content-secondary">{subtitle}</span>
               {conversation.unreadCount > 0 && (
-                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-white">
+                <span
+                  className={cn(
+                    'flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs font-medium text-white',
+                    isMobile ? 'wa-badge' : 'bg-primary'
+                  )}
+                >
                   {conversation.unreadCount}
                 </span>
               )}

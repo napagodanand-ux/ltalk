@@ -6,6 +6,7 @@ import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Button, IconButton } from '../ui';
 import { ROUTES } from '../../lib/constants';
+import { cn } from '../../lib/helpers';
 import { useIsMobile } from '../../lib/hooks';
 import { notify, requestNotificationPermission } from '../../lib/notifications';
 import type { ThemeName } from '../../../../src/shared/types';
@@ -86,13 +87,25 @@ export function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto bg-bg">
       <div className="mx-auto max-w-[560px] p-6">
-        <div className="mb-4 flex items-center gap-2">
+        <div
+          className={cn(
+            'mb-4 flex items-center gap-2',
+            isMobile && 'wa-header -mx-6 -mt-6 mb-4 px-4 py-3'
+          )}
+        >
           {isMobile && (
             <IconButton label="Back" onClick={() => navigate(ROUTES.app)}>
               <ArrowLeft size={18} />
             </IconButton>
           )}
-          <h1 className="text-base font-semibold text-content">Settings</h1>
+          <h1
+            className={cn(
+              'text-base font-semibold text-content',
+              isMobile && 'text-white'
+            )}
+          >
+            Settings
+          </h1>
         </div>
 
         <div className="flex flex-col gap-4">
