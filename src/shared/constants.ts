@@ -58,4 +58,9 @@ export const E2EE = {
   keyLength: 256
 } as const;
 
-export const FRIEND_ONLY_CONVERSATIONS = true;
+// A 1:1 conversation between two users who are NOT friends is capped at this many
+// messages total. After the cap, neither side can send until they become friends
+// (enforced server-side by the `enforce_nonfriend_message_limit` trigger).
+export const NON_FRIEND_MESSAGE_LIMIT = 3;
+
+export const FRIEND_ONLY_CONVERSATIONS = false;

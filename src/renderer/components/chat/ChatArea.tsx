@@ -1,15 +1,18 @@
 import { useState, useCallback } from 'react';
 import type { Message } from '../../../../src/shared/types';
+import { NON_FRIEND_MESSAGE_LIMIT } from '../../../../src/shared/constants';
 
 import { useConversationStore } from '../../stores/conversationStore';
 import { useMessageStore } from '../../stores/messageStore';
+import { useAuthStore } from '../../stores/authStore';
+import { useFriendStore } from '../../stores/friendStore';
 
 import { ChatHeader } from './ChatHeader';
 import { MessageList } from './MessageList';
 import { MessageInput, sendFile } from './MessageInput';
 import { EmptyState } from './EmptyState';
 import { Spinner } from '../ui';
-import { X } from 'lucide-react';
+import { X, UserPlus } from 'lucide-react';
 
 const EMPTY_MESSAGES: Message[] = [];
 
@@ -19,6 +22,22 @@ export default function ChatArea() {
   const messages = useMessageStore((s) =>
     activeId ? s.byConversation[activeId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES
   );
+
+  const user = useAuthStore((s) => s.user);
+  const friends = useFriendStore((s) => s.friends);
+  const sendRequest = useFriendStore((s) => s.sendRequest);
+
+  // Non-friend 1:1 conversations are capped at NON_FRIEND_MESSAGE_LIMIT messages
+  // (enforced server-side). Once reached, block further sending until they become
+  // friends.
+  const conversation = getById(activeId ?? '');
+  const other =
+    conversation && !conversation.is_group
+      ? conversation.participants.find((p) => p.id !== user?.id)
+      : undefined;
+  const otherIsFriend = other ? friends.some((f) => f.id === other.id) : false;
+  const atLimit =
+    Boolean(other && !otherIsFriend) && messages.length >= NON_FRIEND_MESSAGE_LIMIT;
 
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -43,7 +62,6 @@ export default function ChatArea() {
 
   if (!activeId) return <EmptyState />;
 
-  const conversation = getById(activeId);
   const replyMessage = replyToId
     ? messages.find((m) => m.id === replyToId)
     : undefined;
@@ -78,10 +96,27 @@ export default function ChatArea() {
         </div>
       )}
 
+      {atLimit && other && (
+        <div className="flex items-center gap-3 border-t border-edge bg-bg-secondary px-4 py-2 text-sm">
+          <span className="flex-1 text-content-secondary">
+            You've reached the {NON_FRIEND_MESSAGE_LIMIT}-message limit with{' '}
+            {other.display_name || other.username}. Send a friend request to keep chatting.
+          </span>
+          <button
+            type="button"
+            onClick={() => void sendRequest(other.id)}
+            className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+          >
+            <UserPlus size={14} /> Add friend
+          </button>
+        </div>
+      )}
+
       <MessageInput
         conversationId={activeId}
         replyToId={replyToId}
         onClearReply={() => setReplyToId(null)}
+        disabled={atLimit}
       />
 
       {uploading && (

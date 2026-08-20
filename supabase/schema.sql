@@ -235,6 +235,10 @@ WITH CHECK (
     user_id = auth.uid()
     OR (SELECT is_group FROM conversations WHERE id = conversation_id)
     OR friendship_accepted(auth.uid(), user_id)
+    -- Allow a 1:1 conversation with a non-friend (the 2nd participant need not be
+    -- an accepted friend). Groups and friend adds stay restricted to friends.
+    OR (NOT (SELECT is_group FROM conversations WHERE id = conversation_id)
+        AND (SELECT count(*) FROM conversation_participants cp2 WHERE cp2.conversation_id = conversation_id) < 2)
   )
 );
 DROP POLICY IF EXISTS "Users can remove members" ON conversation_participants;
@@ -257,6 +261,8 @@ WITH CHECK ((sender_id = auth.uid()) AND is_participant(messages.conversation_id
         AND p.user_id <> auth.uid()
         AND friendship_accepted(auth.uid(), p.user_id)
     )
+    -- Allow 1:1 messages to a non-friend; the 3-message cap is enforced by a trigger.
+    OR (NOT (SELECT is_group FROM conversations WHERE id = conversation_id))
   ));
 DROP POLICY IF EXISTS "Users can update own messages" ON messages;
 CREATE POLICY "Users can update own messages" ON messages FOR UPDATE
@@ -276,6 +282,39 @@ WITH CHECK ((conversation_id IN (SELECT id FROM conversations WHERE created_by =
 DROP POLICY IF EXISTS "Participants can delete messages" ON messages;
 CREATE POLICY "Participants can delete messages" ON messages FOR DELETE
 USING (is_participant(messages.conversation_id));
+
+-- Hard cap: a 1:1 conversation between non-friends may hold at most 3 messages.
+-- Enforced server-side so the limit holds even if a client tries to bypass it.
+CREATE OR REPLACE FUNCTION enforce_nonfriend_message_limit()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_is_group boolean;
+  v_friend boolean;
+BEGIN
+  SELECT is_group INTO v_is_group FROM conversations WHERE id = NEW.conversation_id;
+  IF v_is_group THEN RETURN NEW; END IF;
+  SELECT EXISTS (
+    SELECT 1 FROM conversation_participants p
+    WHERE p.conversation_id = NEW.conversation_id
+      AND p.user_id <> NEW.sender_id
+      AND friendship_accepted(NEW.sender_id, p.user_id)
+  ) INTO v_friend;
+  IF v_friend THEN RETURN NEW; END IF;
+  IF (SELECT count(*) FROM messages WHERE conversation_id = NEW.conversation_id) >= 3 THEN
+    RAISE EXCEPTION 'MESSAGE_LIMIT_REACHED';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_nonfriend_message_limit ON messages;
+CREATE TRIGGER trg_nonfriend_message_limit
+  BEFORE INSERT ON messages
+  FOR EACH ROW EXECUTE FUNCTION enforce_nonfriend_message_limit();
 
 -- Lets a participant mark the OTHER person's messages as read. The normal
 -- messages UPDATE policy only allows editing one's own rows (sender_id =

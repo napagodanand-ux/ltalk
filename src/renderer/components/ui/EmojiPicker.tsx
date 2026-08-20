@@ -71,9 +71,10 @@ interface EmojiPickerProps {
   label?: string;
   className?: string;
   align?: 'left' | 'right';
+  disabled?: boolean;
 }
 
-export function EmojiPicker({ onSelect, label = 'Emoji', className, align = 'right' }: EmojiPickerProps) {
+export function EmojiPicker({ onSelect, label = 'Emoji', className, align = 'right', disabled }: EmojiPickerProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useClickOutside(ref, () => setOpen(false));
@@ -84,9 +85,10 @@ export function EmojiPicker({ onSelect, label = 'Emoji', className, align = 'rig
         type="button"
         aria-label={label}
         title={label}
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex h-8 w-8 items-center justify-center rounded-md text-content-secondary hover:bg-surface-hover hover:text-content',
+          'inline-flex h-8 w-8 items-center justify-center rounded-md text-content-secondary hover:bg-surface-hover hover:text-content disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent',
           className
         )}
       >

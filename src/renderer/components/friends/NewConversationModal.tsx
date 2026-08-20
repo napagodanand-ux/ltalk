@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { Profile } from '../../../../src/shared/types';
+import { NON_FRIEND_MESSAGE_LIMIT } from '../../../../src/shared/constants';
 import { useNavigate } from 'react-router-dom';
-import { Users, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { useConversationStore, type ConversationView } from '../../stores/conversationStore';
@@ -15,6 +16,25 @@ import * as groupKeysApi from '../../lib/api/groupKeys';
 import { ROUTES } from '../../lib/constants';
 import { Avatar, Button, Input, Modal, ModalContent, Spinner } from '../ui';
 import { debounce } from '../../lib/helpers';
+
+function UserRow({ profile, action }: { profile: Profile; action: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-surface-hover">
+      <Avatar
+        src={profile.avatar_url}
+        name={profile.display_name || profile.username}
+        size={32}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm text-content">
+          {profile.display_name || profile.username}
+        </div>
+        <div className="truncate text-xs text-content-muted">@{profile.username}</div>
+      </div>
+      {action}
+    </div>
+  );
+}
 
 export function NewConversationModal() {
   const navigate = useNavigate();
@@ -73,7 +93,6 @@ export function NewConversationModal() {
   const isFriend = (id: string) => friends.some((f) => f.id === id);
 
   const handleStart = async (profile: Profile) => {
-    if (!isFriend(profile.id)) return;
     const me = useAuthStore.getState().user?.id;
     const existing = useConversationStore
       .getState()
@@ -138,35 +157,7 @@ export function NewConversationModal() {
 
   return (
     <Modal open={open} onOpenChange={setOpen}>
-      <ModalContent title="New conversation">
-        <div className="mb-3 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setMode('dm')}
-            className={
-              'flex-1 rounded-md border px-3 py-1.5 text-sm ' +
-              (mode === 'dm'
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-edge text-content-secondary hover:bg-surface-hover')
-            }
-          >
-            New chat
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('group')}
-            className={
-              'flex-1 rounded-md border px-3 py-1.5 text-sm ' +
-              (mode === 'group'
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-edge text-content-secondary hover:bg-surface-hover')
-            }
-          >
-            <Users size={14} className="mr-1 inline" />
-            New group
-          </button>
-        </div>
-
+      <ModalContent title={mode === 'dm' ? 'New chat' : 'New group'}>
         {mode === 'dm' ? (
           <>
             <Input
@@ -175,53 +166,66 @@ export function NewConversationModal() {
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
             />
+            <p className="mt-2 text-xs text-content-muted">
+              You can message anyone. Non-friends are limited to {NON_FRIEND_MESSAGE_LIMIT} messages until you're friends.
+            </p>
             <div className="mt-3 max-h-[300px] overflow-y-auto">
               {loading && (
                 <div className="flex justify-center py-4">
                   <Spinner />
                 </div>
               )}
-              {!loading && results.length === 0 && (
+              {!loading && query.trim() === '' && (
+                <>
+                  {friends.length === 0 ? (
+                    <div className="py-4 text-center text-sm text-content-muted">No friends yet — search to add some</div>
+                  ) : (
+                    friends.map((profile) => (
+                      <UserRow
+                        key={profile.id}
+                        profile={profile}
+                        action={
+                          <Button variant="primary" className="h-8" onClick={() => void handleStart(profile)}>
+                            Start chat
+                          </Button>
+                        }
+                      />
+                    ))
+                  )}
+                </>
+              )}
+              {!loading && query.trim() !== '' && results.length === 0 && (
                 <div className="py-4 text-center text-sm text-content-muted">No users found</div>
               )}
               {!loading &&
+                query.trim() !== '' &&
                 results.map((profile) => {
                   const friend = isFriend(profile.id);
                   return (
-                    <div
+                    <UserRow
                       key={profile.id}
-                      className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-surface-hover"
-                    >
-                      <Avatar
-                        src={profile.avatar_url}
-                        name={profile.display_name || profile.username}
-                        size={32}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm text-content">
-                          {profile.display_name || profile.username}
-                        </div>
-                        <div className="truncate text-xs text-content-muted">@{profile.username}</div>
-                      </div>
-                      {friend ? (
-                        <Button variant="primary" className="h-8" onClick={() => void handleStart(profile)}>
-                          Start chat
-                        </Button>
-                      ) : (
-                        <div className="flex flex-col items-end gap-1">
-                          <Button variant="outline" className="h-8" disabled>
+                      profile={profile}
+                      action={
+                        friend ? (
+                          <Button variant="primary" className="h-8" onClick={() => void handleStart(profile)}>
                             Start chat
                           </Button>
-                          <Button
-                            variant="ghost"
-                            className="h-7 text-xs"
-                            onClick={() => void sendRequest(profile.id)}
-                          >
-                            Send friend request
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                        ) : (
+                          <div className="flex flex-col items-end gap-1">
+                            <Button variant="primary" className="h-8" onClick={() => void handleStart(profile)}>
+                              Start chat
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={() => void sendRequest(profile.id)}
+                            >
+                              Send friend request
+                            </Button>
+                          </div>
+                        )
+                      }
+                    />
                   );
                 })}
             </div>
