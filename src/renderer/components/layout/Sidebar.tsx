@@ -5,11 +5,10 @@ import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
 import { ConversationList } from '../contacts/ConversationList';
 import { FriendsList } from '../friends/FriendsList';
-import { NewConversationModal } from '../friends/NewConversationModal';
 import { Avatar, IconButton } from '../ui';
 import { cn } from '../../lib/helpers';
 
-export default function Sidebar() {
+export default function Sidebar({ className }: { className?: string }) {
   const navigate = useNavigate();
   const profile = useAuthStore((s) => s.profile);
   const logout = useAuthStore((s) => s.logout);
@@ -30,7 +29,7 @@ export default function Sidebar() {
     );
 
   return (
-    <aside className="lt-panel flex h-full w-[280px] shrink-0 flex-col">
+    <aside className={cn('lt-panel flex h-full shrink-0 flex-col', className)}>
       <div className="flex items-center gap-1 border-b border-edge px-2 py-2">
         <button onClick={() => setActivePanel('chats')} className={navButtonClass(activePanel === 'chats')}>
           <MessageSquare size={16} /> Chats
@@ -61,8 +60,6 @@ export default function Sidebar() {
           </IconButton>
         </div>
       )}
-
-      <NewConversationModal />
     </aside>
   );
 }

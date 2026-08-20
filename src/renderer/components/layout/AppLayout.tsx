@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
-import { useNavigate, Outlet } from 'react-router-dom';
+import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 
 import { TitleBar } from './TitleBar';
 import Sidebar from './Sidebar';
 import RightPanel from './RightPanel';
 import { NotificationOnboarding } from '../notifications/NotificationOnboarding';
+import { NewConversationModal } from '../friends/NewConversationModal';
 
 import { supabase } from '../../lib/supabase';
 import type { Profile, Reaction } from '../../../src/shared/types';
@@ -21,12 +22,21 @@ import { OfflineOverlay } from './OfflineOverlay';
 import { UpdateSplash } from './UpdateSplash';
 import { UpdateDialog } from './UpdateDialog';
 import { APP_MENU_CHANNELS } from '../../lib/constants';
-import { compareVersions } from '../../lib/helpers';
+import { compareVersions, cn } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 
 export function AppLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const activeId = useConversationStore((s) => s.activeId);
   const conversations = useConversationStore((s) => s.conversations);
+  const isMobile = useIsMobile();
+  const isIndex = location.pathname === '/app';
+  // On mobile the sidebar (conversation/friend list) and the active chat are
+  // shown one-at-a-time: the list when no conversation is open (or on a sub
+  // route like settings/profile), the chat otherwise. On desktop they sit
+  // side-by-side.
+  const showSidebar = !isMobile || (isIndex && !activeId);
   const loadConversations = useConversationStore((s) => s.load);
   const loadFriends = useFriendStore((s) => s.load);
   const setNewConversationOpen = useUiStore((s) => s.setNewConversationOpen);
@@ -378,8 +388,17 @@ export function AppLayout() {
     <div className="flex h-full flex-col bg-bg">
       <TitleBar />
       <div className="flex min-h-0 flex-1">
-        <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col bg-bg">
+        <Sidebar
+          className={cn(
+            isMobile ? (showSidebar ? 'w-full' : 'hidden') : 'w-[280px]'
+          )}
+        />
+        <main
+          className={cn(
+            'min-w-0 flex-1 flex-col bg-bg',
+            !isMobile || !showSidebar ? 'flex' : 'hidden'
+          )}
+        >
           <Outlet />
         </main>
         <RightPanel />
@@ -388,6 +407,7 @@ export function AppLayout() {
       <Toaster />
       <RestoreKeysModal />
       <SearchModal />
+      <NewConversationModal />
       <OfflineOverlay />
       <UpdateDialog />
       <UpdateSplash />

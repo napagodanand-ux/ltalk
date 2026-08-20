@@ -1,15 +1,20 @@
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Minus, Square, X, Search, Sun, Moon, MessageSquarePlus, UserPlus, Users } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
+import { useConversationStore } from '../../stores/conversationStore';
 import { IconButton } from '../ui';
 import { APP_NAME } from '../../../../src/shared/constants';
+import { useIsMobile } from '../../lib/hooks';
 
 export function TitleBar() {
+  const navigate = useNavigate();
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
   const setNewConversationOpen = useUiStore((s) => s.setNewConversationOpen);
   const setActivePanel = useUiStore((s) => s.setActivePanel);
+  const isMobile = useIsMobile();
 
   const isElectron = typeof window !== 'undefined' && window.electron?.isElectron === true;
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -25,7 +30,7 @@ export function TitleBar() {
       </div>
 
       <div
-        className="flex flex-1 items-center justify-center"
+        className="hidden flex-1 items-center justify-center md:flex"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         <div
@@ -74,6 +79,10 @@ export function TitleBar() {
                   className={chooserItem}
                   onClick={() => {
                     setMenuOpen(false);
+                    if (isMobile) {
+                      useConversationStore.getState().select(null);
+                      navigate('/app');
+                    }
                     setActivePanel('friends');
                   }}
                 >

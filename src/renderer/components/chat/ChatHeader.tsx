@@ -1,9 +1,11 @@
 import { Avatar, IconButton } from '../ui';
-import { Info, Search } from 'lucide-react';
+import { Info, Search, ArrowLeft } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useConversationStore } from '../../stores/conversationStore';
 import { effectiveStatus } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 import type { ConversationView } from '../../stores/conversationStore';
 
 function capitalize(value: string): string {
@@ -14,6 +16,8 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
   const user = useAuthStore((s) => s.user);
   const setRightPanel = useUiStore((s) => s.setRightPanel);
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
+  const select = useConversationStore((s) => s.select);
+  const isMobile = useIsMobile();
 
   const isGroup = conversation.is_group;
   const other = isGroup
@@ -32,6 +36,11 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
 
   return (
     <div className="flex items-center gap-3 border-b border-edge bg-bg-secondary px-4 py-2.5">
+      {isMobile && (
+        <IconButton label="Back" className="-ml-1" onClick={() => select(null)}>
+          <ArrowLeft size={20} />
+        </IconButton>
+      )}
       <button
         type="button"
         className="flex min-w-0 items-center gap-3"

@@ -128,7 +128,7 @@ export function ModalContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/50" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-surface p-5 shadow-panel',
+          'fixed left-1/2 top-1/2 z-50 w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-surface p-5 shadow-panel',
           className
         )}
       >

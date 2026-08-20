@@ -19,7 +19,8 @@ import {
   ModalContent,
   Button
 } from '../ui';
-import { relativeTime } from '../../lib/helpers';
+import { cn, relativeTime } from '../../lib/helpers';
+import { useIsMobile } from '../../lib/hooks';
 import {
   addParticipants,
   clearMessages,
@@ -36,6 +37,7 @@ export default function RightPanel() {
   const conversation = useConversationStore((s) => (activeId ? s.getById(activeId) : undefined));
   const currentUserId = useAuthStore((s) => s.user?.id);
   const friends = useFriendStore((s) => s.friends);
+  const isMobile = useIsMobile();
 
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -151,7 +153,21 @@ export default function RightPanel() {
   };
 
   return (
-    <aside className="flex h-full w-[320px] shrink-0 flex-col border-l border-edge bg-surface">
+    <>
+      {isMobile && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40"
+          aria-hidden
+          onClick={() => setRightPanel(false)}
+        />
+      )}
+      <aside
+        className={cn(
+          'flex h-full w-[320px] shrink-0 flex-col border-l border-edge bg-surface',
+          isMobile &&
+            'fixed inset-y-0 right-0 z-40 w-[85%] max-w-sm border-l shadow-panel'
+        )}
+      >
       <div className="flex items-center justify-between border-b border-edge px-4 py-3">
         <span className="text-sm font-semibold text-content">
           {isGroup ? 'Group info' : 'Contact info'}
@@ -309,6 +325,7 @@ export default function RightPanel() {
         <Toast message={toastMsg} open={toastOpen} onOpenChange={setToastOpen} />
         <ToastViewport />
       </ToastProvider>
-    </aside>
+      </aside>
+    </>
   );
 }

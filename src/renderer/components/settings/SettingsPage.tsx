@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Moon, Sun, LogOut, RefreshCw, User, Bell, Download } from 'lucide-react';
+import { Moon, Sun, LogOut, RefreshCw, User, Bell, Download, ArrowLeft } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
-import { Button } from '../ui';
+import { Button, IconButton } from '../ui';
 import { ROUTES } from '../../lib/constants';
+import { useIsMobile } from '../../lib/hooks';
 import { notify, requestNotificationPermission } from '../../lib/notifications';
 import type { ThemeName } from '../../../../src/shared/types';
 
 export function SettingsPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
   const profile = useAuthStore((s) => s.profile);
@@ -84,7 +86,14 @@ export function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto bg-bg">
       <div className="mx-auto max-w-[560px] p-6">
-        <h1 className="mb-4 text-base font-semibold text-content">Settings</h1>
+        <div className="mb-4 flex items-center gap-2">
+          {isMobile && (
+            <IconButton label="Back" onClick={() => navigate(ROUTES.app)}>
+              <ArrowLeft size={18} />
+            </IconButton>
+          )}
+          <h1 className="text-base font-semibold text-content">Settings</h1>
+        </div>
 
         <div className="flex flex-col gap-4">
           <section className="rounded-xl border border-edge bg-surface p-5 shadow-panel">
