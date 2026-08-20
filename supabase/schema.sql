@@ -225,6 +225,18 @@ USING (created_by = auth.uid());
 DROP POLICY IF EXISTS "Users can view participants" ON conversation_participants;
 CREATE POLICY "Users can view participants" ON conversation_participants FOR SELECT
 USING (is_participant(conversation_id));
+-- Counts participants without triggering RLS recursion inside policies that
+-- reference conversation_participants while it is being modified.
+CREATE OR REPLACE FUNCTION participant_count(p_conversation_id uuid)
+RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT count(*)::int FROM conversation_participants WHERE conversation_id = p_conversation_id;
+$$;
+GRANT EXECUTE ON FUNCTION participant_count(uuid) TO authenticated, anon;
+
 DROP POLICY IF EXISTS "Admins can add participants" ON conversation_participants;
 CREATE POLICY "Admins can add participants" ON conversation_participants FOR ALL
 USING ((conversation_id IN (SELECT id FROM conversations WHERE created_by = auth.uid()))
@@ -237,8 +249,9 @@ WITH CHECK (
     OR friendship_accepted(auth.uid(), user_id)
     -- Allow a 1:1 conversation with a non-friend (the 2nd participant need not be
     -- an accepted friend). Groups and friend adds stay restricted to friends.
+    -- Uses participant_count() (SECURITY DEFINER) to avoid policy recursion.
     OR (NOT (SELECT is_group FROM conversations WHERE id = conversation_id)
-        AND (SELECT count(*) FROM conversation_participants cp2 WHERE cp2.conversation_id = conversation_id) < 2)
+        AND participant_count(conversation_id) < 2)
   )
 );
 DROP POLICY IF EXISTS "Users can remove members" ON conversation_participants;
