@@ -9,6 +9,7 @@ import { Button, Input } from '../ui';
 export function RestoreKeysModal() {
   const pending = useAuthStore((s) => s.pendingRestore);
   const error = useAuthStore((s) => s.restoreError);
+  const unrecoverable = useAuthStore((s) => s.backupUnrecoverable);
   const restore = useAuthStore((s) => s.restoreWithPassword);
   const reset = useAuthStore((s) => s.resetEncryption);
   const [password, setPassword] = useState('');
@@ -25,9 +26,6 @@ export function RestoreKeysModal() {
     if (ok) {
       setPassword('');
       setMode('restore');
-      // The key just became available, but messages already loaded were
-      // decrypted before it existed and are cached as "🔒 Encrypted message".
-      // Re-decrypt the open conversation so it reflects the restored key.
       const activeId = useConversationStore.getState().activeId;
       if (activeId) await useMessageStore.getState().load(activeId);
     }
@@ -46,6 +44,10 @@ export function RestoreKeysModal() {
     }
   };
 
+  // When the backup can't be unlocked (e.g. the account password changed after
+  // sign-up), "Restore" will never succeed — surface Reset as the primary path.
+  const startInReset = unrecoverable && mode === 'restore';
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4">
       <div className="w-[360px] rounded-lg border border-edge bg-surface p-5 shadow-panel">
@@ -53,7 +55,44 @@ export function RestoreKeysModal() {
           <Lock size={18} className="text-primary" />
           <h2 className="text-base font-semibold text-content">Restore encryption keys</h2>
         </div>
-        {mode === 'restore' ? (
+        {startInReset ? (
+          <>
+            <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-200">
+              Your saved encryption key can’t be unlocked with this password — most likely because
+              your account password was changed after you signed up. Enter your <strong>current</strong>{" "}
+              password to reset your keys so messages work again. (Old messages sent before this
+              can’t be recovered.)
+            </div>
+            <Input
+              type="password"
+              autoFocus
+              placeholder="Current account password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void doReset();
+              }}
+            />
+            {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+            <Button
+              className="mt-4 h-9 w-full"
+              onClick={() => void doReset()}
+              disabled={busy || !password}
+            >
+              {busy ? 'Resetting…' : 'Reset & re-encrypt'}
+            </Button>
+            <button
+              type="button"
+              className="mt-3 w-full text-center text-xs text-content-secondary hover:text-content"
+              onClick={() => {
+                setMode('restore');
+                setPassword('');
+              }}
+            >
+              Try restoring with the old password instead
+            </button>
+          </>
+        ) : mode === 'restore' ? (
           <>
             <p className="mb-3 text-sm text-content-secondary">
               Your messages are end-to-end encrypted with a key from your other device. Enter your

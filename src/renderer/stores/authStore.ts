@@ -16,6 +16,7 @@ interface AuthState {
   loading: boolean;
   pendingRestore: boolean;
   restoreError: string | null;
+  backupUnrecoverable: boolean;
   initialize: () => Promise<void>;
   login: (identifier: string, password: string) => Promise<void>;
   register: (input: {
@@ -89,7 +90,10 @@ async function writeStoredKey(userId: string, value: string): Promise<void> {
 //   3. otherwise generate a fresh pair and, when possible, back it up.
 // Returns `needsRestore: true` when a backup exists but no password is
 // available yet (session restore on a new device) so the UI can prompt.
-async function bootstrapKeys(profile: Profile, password?: string): Promise<{ needsRestore: boolean }> {
+async function bootstrapKeys(
+  profile: Profile,
+  password?: string
+): Promise<{ needsRestore: boolean; backupUnrecoverable?: boolean }> {
   const cipher = profile.key_backup_cipher;
   const salt = profile.key_backup_salt;
   const hasBackup = Boolean(cipher && salt);
@@ -133,7 +137,11 @@ async function bootstrapKeys(profile: Profile, password?: string): Promise<{ nee
     } catch {
       /* wrong password or corrupt backup — do NOT overwrite the public key */
     }
-    return { needsRestore: true };
+    // A backup exists but we could not unlock it with the supplied password.
+    // This almost always means the account password changed after sign-up, so
+    // the key backup (encrypted with the original password) is now unrecoverable
+    // via restore — the user must reset instead.
+    return { needsRestore: true, backupUnrecoverable: true };
   }
 
   // 3) No backup yet: brand-new or legacy account. Generate a fresh key and
@@ -166,17 +174,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: false,
   pendingRestore: false,
   restoreError: null,
+  backupUnrecoverable: false,
 
   initialize: async () => {
     const result = await authApi.restoreSession();
     if (result?.user && result.session) {
       const profile = await authApi.getProfile();
       let needsRestore = false;
+      let unrecoverable = false;
       if (profile) {
         const r = await bootstrapKeys(profile);
         needsRestore = r.needsRestore;
+        unrecoverable = Boolean(r.backupUnrecoverable);
       }
-      set({ user: result.user, session: result.session, profile, pendingRestore: needsRestore, initialized: true });
+      set({ user: result.user, session: result.session, profile, pendingRestore: needsRestore, backupUnrecoverable: unrecoverable, initialized: true });
     } else {
       set({ initialized: true });
     }
@@ -189,11 +200,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (!result.user) throw new Error('Sign in failed');
       const profile = await authApi.getProfile();
       let needsRestore = false;
+      let unrecoverable = false;
       if (profile) {
         const r = await bootstrapKeys(profile, password);
         needsRestore = r.needsRestore;
+        unrecoverable = Boolean(r.backupUnrecoverable);
       }
-      set({ user: result.user, session: result.session, profile, pendingRestore: needsRestore });
+      set({ user: result.user, session: result.session, profile, pendingRestore: needsRestore, backupUnrecoverable: unrecoverable });
     } finally {
       set({ loading: false });
     }
@@ -236,7 +249,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         /* ignore */
       }
     }
-    set({ user: null, session: null, profile: null, pendingRestore: false, restoreError: null });
+    set({ user: null, session: null, profile: null, pendingRestore: false, restoreError: null, backupUnrecoverable: false });
   },
 
   refreshProfile: async () => {
@@ -246,7 +259,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setProfile: (profile) => set({ profile }),
 
-  setPendingRestore: (value) => set({ pendingRestore: value }),
+  setPendingRestore: (value) => set({ pendingRestore: value, backupUnrecoverable: value ? get().backupUnrecoverable : false }),
 
   restoreWithPassword: async (password) => {
     const profile = get().profile;
@@ -291,7 +304,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         key_backup_cipher: backup.cipher,
         key_backup_salt: backup.salt
       });
-      set({ pendingRestore: false, restoreError: null });
+      set({ pendingRestore: false, restoreError: null, backupUnrecoverable: false });
       return true;
     } catch {
       set({ restoreError: 'Could not reset encryption keys.' });
