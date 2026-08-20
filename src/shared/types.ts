@@ -41,6 +41,7 @@ export interface Message {
   file_url: string | null;
   file_name: string | null;
   file_size: number | null;
+  duration: number | null;
   mime_type: string | null;
   encrypted: boolean;
   is_read: boolean;

@@ -11,7 +11,7 @@ import * as profilesApi from '../../lib/api/profiles';
 import { ROUTES } from '../../lib/constants';
 import { effectiveStatus, debounce } from '../../lib/helpers';
 import type { Profile } from '../../../../src/shared/types';
-import { Avatar, ContextMenu, ContextMenuItem, IconButton, Input, Spinner } from '../ui';
+import { Avatar, ContextMenu, ContextMenuItem, IconButton, Input, Spinner, Button } from '../ui';
 
 export function FriendsList() {
   const navigate = useNavigate();
@@ -154,20 +154,25 @@ export function FriendsList() {
                 </div>
                 <div className="truncate text-xs text-content-muted">@{profile.username}</div>
               </div>
-              <button
-                type="button"
-                disabled={requested[profile.id]}
-                onClick={async () => {
-                  setRequested((r) => ({ ...r, [profile.id]: true }));
-                  await sendRequest(profile.id);
-                  setAddQuery('');
-                  setAddResults([]);
-                }}
-                className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-60"
-              >
-                <UserPlus size={12} />
-                {requested[profile.id] ? 'Sent' : 'Add'}
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <Button variant="primary" className="h-7" onClick={() => void openChat(profile)}>
+                  Start chat
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="h-6 text-xs"
+                  disabled={requested[profile.id]}
+                  onClick={async () => {
+                    setRequested((r) => ({ ...r, [profile.id]: true }));
+                    await sendRequest(profile.id);
+                    setAddQuery('');
+                    setAddResults([]);
+                  }}
+                >
+                  <UserPlus size={12} />
+                  {requested[profile.id] ? 'Sent' : 'Send friend request'}
+                </Button>
+              </div>
             </div>
           ))}
       </div>

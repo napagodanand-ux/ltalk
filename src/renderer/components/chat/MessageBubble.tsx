@@ -164,7 +164,7 @@ export function MessageBubble({
           {message.type === 'video' && message.file_url && (
             <video src={message.file_url} controls className="max-h-60 rounded-md" />
           )}
-          {message.file_url && (
+          {message.file_url && message.type !== 'voice' && (
             <div className="flex items-center gap-2">
               <FileText size={16} className="shrink-0" />
               <a

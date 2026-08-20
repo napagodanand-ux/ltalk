@@ -7,8 +7,19 @@ import { Avatar, ContextMenu, ContextMenuItem } from '../ui';
 import { cn, formatTimestamp, messagePreview, effectiveStatus } from '../../lib/helpers';
 import { deleteConversation } from '../../lib/api/conversations';
 
+function trailingVoiceCount(conversation: ConversationView): number {
+  const messages = useMessageStore.getState().byConversation[conversation.id];
+  if (!messages || messages.length === 0) return 1;
+  let count = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].type === 'voice') count++;
+    else break;
+  }
+  return count || 1;
+}
+
 function previewFor(conversation: ConversationView): string {
-  return messagePreview(conversation.lastMessage);
+  return messagePreview(conversation.lastMessage, trailingVoiceCount(conversation));
 }
 
 export function ConversationItem({

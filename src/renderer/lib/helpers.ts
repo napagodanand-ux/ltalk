@@ -8,11 +8,27 @@ export function cn(...inputs: ClassValue[]): string {
 
 // Sidebar/last-message preview text for a conversation. Exported (and tested)
 // so both the UI and the tests agree on the exact wording.
-export function messagePreview(message: Message | null): string {
+// `trailingVoice` is the number of consecutive voice messages at the end of the
+// conversation, used to pluralize ("Voice message" vs "2 voice messages").
+export function messagePreview(message: Message | null, trailingVoice = 1): string {
   if (!message) return 'No messages yet';
   if (message.type === 'text') return message.content ?? 'Message deleted';
   if (message.type === 'image') return 'Image';
+  if (message.type === 'video') return 'Video';
+  if (message.type === 'voice') {
+    if (trailingVoice > 1) return `${trailingVoice} voice messages`;
+    const dur = message.duration ? ` · ${formatDuration(message.duration)}` : '';
+    return `Voice message${dur}`;
+  }
   return 'Attachment';
+}
+
+// Formats a duration (in seconds) as m:ss, e.g. 5 -> "0:05", 75 -> "1:15".
+export function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const minutes = Math.floor(s / 60);
+  const seconds = s % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function formatTimestamp(iso: string): string {

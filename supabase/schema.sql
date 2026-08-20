@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS messages (
   file_url TEXT,
   file_name TEXT,
   file_size INTEGER,
+  duration INTEGER,
   mime_type TEXT,
   encrypted BOOLEAN DEFAULT TRUE,
   is_read BOOLEAN DEFAULT FALSE,

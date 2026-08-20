@@ -19,10 +19,31 @@ function deriveType(mime: string): MessageType {
   return 'file';
 }
 
+// Reads the playback duration (seconds) of an audio blob via a temporary
+// <audio> element so we can persist it for voice-message previews.
+function getAudioDuration(blob: Blob): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    const cleanup = () => URL.revokeObjectURL(url);
+    audio.onloadedmetadata = () => {
+      cleanup();
+      resolve(Number.isFinite(audio.duration) ? Math.round(audio.duration) : undefined);
+    };
+    audio.onerror = () => {
+      cleanup();
+      resolve(undefined);
+    };
+    audio.src = url;
+  });
+}
+
 export async function sendFile(
   conversationId: string,
   file: File,
-  onProgress?: (ratio: number) => void
+  onProgress?: (ratio: number) => void,
+  duration?: number | null
 ): Promise<void> {
   const user = useAuthStore.getState().user;
   if (!user) return;
@@ -41,6 +62,7 @@ export async function sendFile(
       file_url: uploaded.url,
       file_name: uploaded.name,
       file_size: uploaded.size,
+      duration: type === 'voice' ? duration ?? null : null,
       mime_type: uploaded.mime
     })
     .select('*')
@@ -131,7 +153,8 @@ export function MessageInput({
           type: blob.type
         });
         try {
-          await sendFile(conversationId, file);
+          const duration = await getAudioDuration(blob);
+          await sendFile(conversationId, file, undefined, duration);
         } catch {
           pushToast({ body: 'Failed to send voice message', variant: 'error' });
         }
