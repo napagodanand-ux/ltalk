@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useFriendStore } from '../../stores/friendStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useConversationStore } from '../../stores/conversationStore';
+import { useUiStore } from '../../stores/uiStore';
 import * as conversationsApi from '../../lib/api/conversations';
 import { ROUTES } from '../../lib/constants';
 import { effectiveStatus } from '../../lib/helpers';
@@ -18,6 +19,8 @@ export function FriendsList() {
   const load = useFriendStore((s) => s.load);
   const respond = useFriendStore((s) => s.respond);
   const block = useFriendStore((s) => s.block);
+  const remove = useFriendStore((s) => s.remove);
+  const setRightPanel = useUiStore((s) => s.setRightPanel);
 
   // Opens (or creates) a 1:1 conversation with a friend and jumps to the chat.
   const openChat = async (friend: Profile) => {
@@ -43,6 +46,36 @@ export function FriendsList() {
       useConversationStore.getState().select(conversation.id);
     }
     navigate(ROUTES.app);
+  };
+
+  // Opens the friend's details panel. Requires a conversation to exist (the
+  // details view is keyed off the active conversation's other participant), so
+  // we reuse/resolve one and select it before showing the right panel.
+  const viewProfile = async (friend: Profile) => {
+    const me = useAuthStore.getState().user?.id;
+    const existing = useConversationStore
+      .getState()
+      .conversations.find(
+        (c) =>
+          !c.is_group &&
+          c.participants.some((p) => p.id === friend.id) &&
+          c.participants.some((p) => p.id === me)
+      );
+    let id: string;
+    if (existing) {
+      id = existing.id;
+    } else {
+      const conversation = await conversationsApi.createConversation([friend.id]);
+      useConversationStore.getState().upsert({
+        ...conversation,
+        participants: [friend],
+        lastMessage: null,
+        unreadCount: 0
+      });
+      id = conversation.id;
+    }
+    useConversationStore.getState().select(id);
+    setRightPanel(true);
   };
 
   useEffect(() => {
@@ -112,10 +145,10 @@ export function FriendsList() {
             <ContextMenuItem onSelect={() => void openChat(f)}>
               <MessageCircle size={14} /> Message
             </ContextMenuItem>
-            <ContextMenuItem>
+            <ContextMenuItem onSelect={() => void viewProfile(f)}>
               <Eye size={14} /> View Profile
             </ContextMenuItem>
-            <ContextMenuItem onSelect={() => void block(f.id)}>
+            <ContextMenuItem onSelect={() => void remove(f.id)}>
               <UserMinus size={14} /> Remove
             </ContextMenuItem>
             <ContextMenuItem onSelect={() => void block(f.id)}>

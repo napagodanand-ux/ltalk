@@ -341,14 +341,15 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     let content = newText;
     let encrypted = false;
     if (conversation && !conversation.is_group) {
+      // Use the fresh counterparty key, not the (possibly stale) cached one —
+      // mirroring `send`. Editing after the other side rotates/resets their key
+      // would otherwise encrypt against the old key and they could never decrypt.
       const other = conversation.participants.find((p) => p.id !== user.id);
-      if (other?.public_key) {
-        const privateKey = getPrivateKey();
-        const theirPublic = JSON.parse(atob(other.public_key)) as JsonWebKey;
-        if (privateKey) {
-          content = await encryptMessage(newText, privateKey, theirPublic);
-          encrypted = true;
-        }
+      const privateKey = getPrivateKey();
+      const theirPublic = await resolveCounterpartyPublicKey(other?.id, other?.public_key);
+      if (privateKey && theirPublic) {
+        content = await encryptMessage(newText, privateKey, theirPublic);
+        encrypted = true;
       }
     } else if (conversation?.is_group) {
       const privateKey = getPrivateKey();

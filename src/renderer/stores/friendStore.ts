@@ -11,6 +11,7 @@ interface FriendState {
   sendRequest: (userId: string) => Promise<void>;
   respond: (friendshipId: string, accept: boolean) => Promise<void>;
   block: (userId: string) => Promise<void>;
+  remove: (userId: string) => Promise<void>;
   updateProfile: (profile: Profile) => void;
 }
 
@@ -44,6 +45,11 @@ export const useFriendStore = create<FriendState>((set, get) => ({
 
   block: async (userId) => {
     await friendApi.blockUser(userId);
+    await get().load();
+  },
+
+  remove: async (userId) => {
+    await friendApi.removeFriend(userId);
     await get().load();
   },
 

@@ -319,6 +319,25 @@ $$;
 
 GRANT EXECUTE ON FUNCTION mark_conversation_read(uuid, uuid) TO authenticated, anon;
 
+-- Unfriend: removes the accepted friendship between the caller and p_target in
+-- either direction. SECURITY DEFINER so it bypasses the restrictive delete
+-- policy (which only allows deleting rows where the caller is user_id), letting a
+-- user remove a friend regardless of who originally sent the request.
+CREATE OR REPLACE FUNCTION remove_friend(p_target uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM friendships
+    WHERE (user_id = auth.uid() AND friend_id = p_target)
+       OR (user_id = p_target AND friend_id = auth.uid());
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION remove_friend(uuid) TO authenticated, anon;
+
 -- Per-user "delete for me": a row here means the given user has hidden the
 -- given message on their side only. It never affects the other participant,
 -- unlike deleting the message row itself.

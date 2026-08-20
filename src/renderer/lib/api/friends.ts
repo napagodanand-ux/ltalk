@@ -74,6 +74,14 @@ export async function blockUser(friendId: string): Promise<void> {
   await window.electron.friendships.block(friendId);
 }
 
+// Unfriend: removes the accepted friendship with the given user in either
+// direction. Backed by the SECURITY DEFINER `remove_friend` RPC so it works
+// regardless of who originally sent the request.
+export async function removeFriend(friendId: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_friend', { p_target: friendId });
+  if (error) throw new Error(error.message);
+}
+
 async function fetchProfileById(userId: string): Promise<Profile | null> {
   const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
   return (data as Profile) ?? null;
