@@ -246,12 +246,26 @@ export function AppLayout() {
     };
   }, [setNewConversationOpen, setSearchOpen, toggleTheme, navigate]);
 
-  // Global, app-wide realtime. A single channel receives every message event
-  // for the user's conversations (RLS-scoped) so the sidebar, unread badges and
-  // notifications stay live regardless of which chat is open. Profile changes
-  // (avatar, name, status) propagate everywhere they appear.
+  // Global, app-wide realtime. Every channel below is RLS-scoped to the current
+  // user, so it only ever receives rows the user is allowed to see. This keeps
+  // the sidebar, unread badges, presence, friend requests, reactions and
+  // notifications live regardless of which chat is open.
   useEffect(() => {
-    const messageUnsub = useMessageStore.getState().subscribe();
+    if (!useAuthStore.getState().user) return;
+
+    const channels: Array<ReturnType<typeof supabase.channel>> = [];
+
+    // Messages: new messages, read receipts and delete-for-everyone for any
+    // conversation the user belongs to.
+    const messagesChannel = supabase
+      .channel('realtime:messages')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages' },
+        (payload) => useMessageStore.getState().receiveRealtime(payload)
+      )
+      .subscribe();
+    channels.push(messagesChannel);
 
     const profilesChannel = supabase
       .channel('realtime:profiles')
@@ -265,6 +279,7 @@ export function AppLayout() {
         }
       )
       .subscribe();
+    channels.push(profilesChannel);
 
     const deletionsChannel = supabase
       .channel('realtime:deletions')
@@ -277,6 +292,7 @@ export function AppLayout() {
         }
       )
       .subscribe();
+    channels.push(deletionsChannel);
 
     const reactionsChannel = supabase
       .channel('realtime:reactions')
@@ -293,6 +309,7 @@ export function AppLayout() {
         }
       )
       .subscribe();
+    channels.push(reactionsChannel);
 
     // Group-key changes (rotation on member removal/addition). Remaining members
     // refresh their cached key and re-decrypt the open conversation so history
@@ -312,13 +329,32 @@ export function AppLayout() {
         }
       )
       .subscribe();
+    channels.push(keysChannel);
+
+    // Friend requests / accepts / blocks. Any change to a friendship that
+    // involves the current user refreshes the friends + pending lists so the
+    // Friends tab and request notifications update instantly.
+    const friendshipsChannel = supabase
+      .channel('realtime:friendships')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'friendships' },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as {
+            user_id?: string;
+            friend_id?: string;
+          };
+          const me = useAuthStore.getState().user?.id;
+          if (!me) return;
+          if (row.user_id !== me && row.friend_id !== me) return;
+          void useFriendStore.getState().load();
+        }
+      )
+      .subscribe();
+    channels.push(friendshipsChannel);
 
     return () => {
-      messageUnsub();
-      supabase.removeChannel(profilesChannel);
-      supabase.removeChannel(deletionsChannel);
-      supabase.removeChannel(reactionsChannel);
-      supabase.removeChannel(keysChannel);
+      channels.forEach((ch) => supabase.removeChannel(ch));
     };
   }, []);
 
@@ -342,14 +378,19 @@ export function AppLayout() {
       void store.markRead(activeId);
     }, 4000);
 
-    // Typing indicator for the open conversation.
+    // Typing indicator for the open conversation. The sender broadcasts on the
+    // same channel name (AppLayout subscribes it for the active conversation),
+    // so we receive their "typing" events here. Ignore our own echo.
+    let typingTimeout: ReturnType<typeof setTimeout> | undefined;
     const typingChannel = supabase
       .channel(`conversation:${activeId}`)
-      .on('broadcast', { event: 'typing' }, () => {
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        if (payload.payload?.senderId === useAuthStore.getState().user?.id) return;
         useMessageStore.setState((state) => ({
           typing: { ...state.typing, [activeId]: true }
         }));
-        setTimeout(() => {
+        if (typingTimeout) clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
           useMessageStore.setState((state) => ({
             typing: { ...state.typing, [activeId]: false }
           }));

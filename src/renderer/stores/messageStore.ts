@@ -534,10 +534,16 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   },
 
   notifyTyping: (conversationId) => {
-    supabase.channel(`conversation:${conversationId}`).send({
+    const me = useAuthStore.getState().user?.id;
+    if (!me) return;
+    // AppLayout already subscribes to `conversation:<id>` for the open chat, so
+    // `supabase.channel` returns that same joined channel. Broadcasting on it
+    // reaches the other participant who is subscribed to the same conversation.
+    const channel = supabase.channel(`conversation:${conversationId}`);
+    void channel.send({
       type: 'broadcast',
       event: 'typing',
-      payload: { conversationId }
+      payload: { conversationId, senderId: me }
     });
   },
 
