@@ -179,6 +179,22 @@ export async function deleteConversation(conversationId: string): Promise<void> 
   if (error) throw new Error(error.message);
 }
 
+// Reads the persistent non-friend message tally between the current user and
+// `otherId` (0 if none). Used to enforce the 3-message per-person cap on the
+// client even after a conversation has been deleted and recreated.
+export async function getNonFriendMessageTotal(otherId: string): Promise<number> {
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+  const { data, error } = await supabase.rpc('nonfriend_message_total', {
+    p_me: user.id,
+    p_other: otherId
+  });
+  if (error) return 0;
+  return (data as number | null) ?? 0;
+}
+
 export async function addParticipants(
   conversationId: string,
   userIds: string[]

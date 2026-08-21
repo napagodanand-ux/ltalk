@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { Message } from '../../../../src/shared/types';
 import { NON_FRIEND_MESSAGE_LIMIT } from '../../../../src/shared/constants';
 
@@ -6,6 +6,7 @@ import { useConversationStore } from '../../stores/conversationStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useFriendStore } from '../../stores/friendStore';
+import { getNonFriendMessageTotal } from '../../lib/api/conversations';
 
 import { ChatHeader } from './ChatHeader';
 import { MessageList } from './MessageList';
@@ -36,8 +37,29 @@ export default function ChatArea() {
       ? conversation.participants.find((p) => p.id !== user?.id)
       : undefined;
   const otherIsFriend = other ? friends.some((f) => f.id === other.id) : false;
+  const otherId = other?.id;
+
+  // The 3-message non-friend cap is enforced per person-pair (server-side, in a
+  // persistent tally), not per conversation. We mirror that tally here so the
+  // limit holds even after a conversation is deleted and recreated. Re-fetch
+  // whenever the open conversation or its message count changes (a send/receive
+  // updates the server tally, which we then reflect).
+  const [pairTotal, setPairTotal] = useState(0);
+  useEffect(() => {
+    if (otherId && !otherIsFriend && activeId) {
+      let cancelled = false;
+      void getNonFriendMessageTotal(otherId).then((t) => {
+        if (!cancelled) setPairTotal(t);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setPairTotal(0);
+  }, [activeId, otherId, otherIsFriend, messages.length]);
+
   const atLimit =
-    Boolean(other && !otherIsFriend) && messages.length >= NON_FRIEND_MESSAGE_LIMIT;
+    Boolean(other && !otherIsFriend) && pairTotal >= NON_FRIEND_MESSAGE_LIMIT;
 
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);

@@ -300,8 +300,19 @@ DROP POLICY IF EXISTS "Participants can delete messages" ON messages;
 CREATE POLICY "Participants can delete messages" ON messages FOR DELETE
 USING (is_participant(messages.conversation_id));
 
--- Hard cap: a 1:1 conversation between non-friends may hold at most 3 messages.
--- Enforced server-side so the limit holds even if a client tries to bypass it.
+-- Hard cap: two non-friends may exchange at most 3 messages TOTAL, across all
+-- of their 1:1 conversations. The tally is kept in a dedicated table (not the
+-- messages themselves) so deleting a conversation does NOT reset the limit —
+-- the cap is per person-pair, not per conversation, and cannot be bypassed by
+-- starting a new chat. Enforced server-side so it holds even if a client tries
+-- to circumvent it.
+CREATE TABLE IF NOT EXISTS nonfriend_message_totals (
+  user_a uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  user_b uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  total  integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_a, user_b)
+);
+
 CREATE OR REPLACE FUNCTION enforce_nonfriend_message_limit()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -310,18 +321,39 @@ SET search_path = public
 AS $$
 DECLARE
   v_is_group boolean;
+  v_other uuid;
   v_friend boolean;
+  v_a uuid;
+  v_b uuid;
+  v_total int;
 BEGIN
   SELECT is_group INTO v_is_group FROM conversations WHERE id = NEW.conversation_id;
   IF v_is_group THEN RETURN NEW; END IF;
+
+  SELECT user_id INTO v_other FROM conversation_participants
+    WHERE conversation_id = NEW.conversation_id AND user_id <> NEW.sender_id LIMIT 1;
+  IF v_other IS NULL THEN RETURN NEW; END IF;
+
   SELECT EXISTS (
-    SELECT 1 FROM conversation_participants p
-    WHERE p.conversation_id = NEW.conversation_id
-      AND p.user_id <> NEW.sender_id
-      AND friendship_accepted(NEW.sender_id, p.user_id)
+    SELECT 1 FROM friendships f
+    WHERE f.status = 'accepted'
+      AND ((f.user_id = NEW.sender_id AND f.friend_id = v_other)
+        OR (f.user_id = v_other AND f.friend_id = NEW.sender_id))
   ) INTO v_friend;
   IF v_friend THEN RETURN NEW; END IF;
-  IF (SELECT count(*) FROM messages WHERE conversation_id = NEW.conversation_id) >= 3 THEN
+
+  -- Ordered pair so (a,b) and (b,a) map to the same tally row. The UPSERT takes
+  -- a row lock, making the read-and-increment atomic (no race past the limit).
+  v_a := LEAST(NEW.sender_id, v_other);
+  v_b := GREATEST(NEW.sender_id, v_other);
+
+  INSERT INTO nonfriend_message_totals (user_a, user_b, total)
+    VALUES (v_a, v_b, 1)
+  ON CONFLICT (user_a, user_b) DO UPDATE SET total = nonfriend_message_totals.total + 1
+  RETURNING total INTO v_total;
+
+  IF v_total > 3 THEN
+    UPDATE nonfriend_message_totals SET total = total - 1 WHERE user_a = v_a AND user_b = v_b;
     RAISE EXCEPTION 'MESSAGE_LIMIT_REACHED';
   END IF;
   RETURN NEW;
@@ -332,6 +364,18 @@ DROP TRIGGER IF EXISTS trg_nonfriend_message_limit ON messages;
 CREATE TRIGGER trg_nonfriend_message_limit
   BEFORE INSERT ON messages
   FOR EACH ROW EXECUTE FUNCTION enforce_nonfriend_message_limit();
+
+-- Reads the persistent non-friend message tally between two users (0 if none).
+CREATE OR REPLACE FUNCTION nonfriend_message_total(p_me uuid, p_other uuid)
+RETURNS integer
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT total FROM nonfriend_message_totals
+  WHERE user_a = LEAST(p_me, p_other) AND user_b = GREATEST(p_me, p_other);
+$$;
 
 -- Lets a participant mark the OTHER person's messages as read. The normal
 -- messages UPDATE policy only allows editing one's own rows (sender_id =
