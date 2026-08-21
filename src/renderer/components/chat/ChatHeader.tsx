@@ -1,9 +1,14 @@
+import { useEffect, useState } from 'react';
 import { Avatar, IconButton } from '../ui';
-import { Info, Search, ArrowLeft } from 'lucide-react';
+import { Info, Search, ArrowLeft, Phone, Video, UserPlus } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useConversationStore } from '../../stores/conversationStore';
+import { useCallStore } from '../../stores/callStore';
+import { callManager } from '../../lib/call';
+import { getActiveCall } from '../../lib/api/calls';
+import type { Call } from '../../../../src/shared/types';
 import { effectiveStatus, cn } from '../../lib/helpers';
 import { useIsMobile } from '../../lib/hooks';
 import type { ConversationView } from '../../stores/conversationStore';
@@ -19,6 +24,28 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const select = useConversationStore((s) => s.select);
   const isMobile = useIsMobile();
+
+  const activeCall = useCallStore((s) => s.activeCall);
+  const incoming = useCallStore((s) => s.incoming);
+  const [joinable, setJoinable] = useState<Call | null>(null);
+
+  // Surface a "Join" affordance when this conversation already has a live call
+  // that the current user hasn't joined yet (e.g. someone started it earlier).
+  useEffect(() => {
+    let cancelled = false;
+    if (activeCall || incoming) {
+      setJoinable(null);
+      return;
+    }
+    void getActiveCall(conversation.id)
+      .then((c) => {
+        if (!cancelled) setJoinable(c);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation.id, activeCall, incoming]);
 
   const isGroup = conversation.is_group;
   const other = isGroup
@@ -76,6 +103,30 @@ export function ChatHeader({ conversation }: { conversation: ConversationView })
       <IconButton label="Search" className="ml-auto" onClick={() => setSearchOpen(true)}>
         <Search size={18} />
       </IconButton>
+      {!activeCall && !incoming &&
+        (joinable ? (
+          <IconButton
+            label={`Join ${joinable.type} call`}
+            onClick={() => void callManager.joinActiveCall(joinable)}
+          >
+            <UserPlus size={18} />
+          </IconButton>
+        ) : (
+          <>
+            <IconButton
+              label="Voice call"
+              onClick={() => void callManager.startCall(conversation.id, 'voice')}
+            >
+              <Phone size={18} />
+            </IconButton>
+            <IconButton
+              label="Video call"
+              onClick={() => void callManager.startCall(conversation.id, 'video')}
+            >
+              <Video size={18} />
+            </IconButton>
+          </>
+        ))}
       <IconButton
         label="Conversation info"
         onClick={() => setRightPanel(!rightPanelOpen)}

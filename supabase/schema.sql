@@ -537,4 +537,79 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE conversation_keys;
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'calls'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE calls;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'call_participants'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE call_participants;
+  END IF;
 END $$;
+
+-- VOICE / VIDEO CALLS
+-- A `calls` row represents one active (or ended) call in a conversation. The
+-- actual media never touches the database or server: peers connect directly
+-- via WebRTC (mesh) and exchange SDP / ICE signalling over a Supabase Realtime
+-- broadcast channel. The DB row exists only to (a) let participants discover an
+-- in-progress call (e.g. on reconnect / late join) and (b) keep a roster in
+-- `call_participants`. All rows are scoped to conversation members via
+-- is_participant(), so a call is only visible to people in that conversation —
+-- which is exactly the group/1:1 scope the calls are initiated from.
+CREATE TABLE IF NOT EXISTS calls (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  initiator_id UUID NOT NULL REFERENCES profiles(id),
+  type TEXT NOT NULL CHECK (type IN ('voice', 'video')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended')),
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_calls_conversation ON calls(conversation_id);
+
+CREATE TABLE IF NOT EXISTS call_participants (
+  call_id UUID NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  left_at TIMESTAMPTZ,
+  PRIMARY KEY (call_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_call_participants_user ON call_participants(user_id);
+
+ALTER TABLE calls ENABLE ROW LEVEL SECURITY;
+ALTER TABLE call_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calls REPLICA IDENTITY FULL;
+ALTER TABLE call_participants REPLICA IDENTITY FULL;
+
+DROP POLICY IF EXISTS "Participants view calls" ON calls;
+CREATE POLICY "Participants view calls" ON calls FOR SELECT
+  USING (is_participant(conversation_id));
+
+DROP POLICY IF EXISTS "Participants start calls" ON calls;
+CREATE POLICY "Participants start calls" ON calls FOR INSERT
+  WITH CHECK (is_participant(conversation_id) AND initiator_id = auth.uid());
+
+DROP POLICY IF EXISTS "Initiator ends calls" ON calls;
+CREATE POLICY "Initiator ends calls" ON calls FOR UPDATE
+  USING (initiator_id = auth.uid());
+
+DROP POLICY IF EXISTS "Participants view call members" ON call_participants;
+CREATE POLICY "Participants view call members" ON call_participants FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM calls c WHERE c.id = call_id AND is_participant(c.conversation_id)
+  ));
+
+DROP POLICY IF EXISTS "Participants join calls" ON call_participants;
+CREATE POLICY "Participants join calls" ON call_participants FOR INSERT
+  WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (SELECT 1 FROM calls c WHERE c.id = call_id AND is_participant(c.conversation_id))
+  );
+
+DROP POLICY IF EXISTS "Participants leave calls" ON call_participants;
+CREATE POLICY "Participants leave calls" ON call_participants FOR UPDATE
+  USING (user_id = auth.uid());

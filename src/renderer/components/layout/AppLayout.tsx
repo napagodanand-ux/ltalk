@@ -21,6 +21,9 @@ import { SearchModal } from '../chat/SearchModal';
 import { OfflineOverlay } from './OfflineOverlay';
 import { UpdateSplash } from './UpdateSplash';
 import { UpdateDialog } from './UpdateDialog';
+import { CallOverlay } from '../call/CallOverlay';
+import { IncomingCallDialog } from '../call/IncomingCallDialog';
+import { callManager } from '../../lib/call';
 import { APP_MENU_CHANNELS } from '../../lib/constants';
 import { compareVersions, cn } from '../../lib/helpers';
 import { useIsMobile } from '../../lib/hooks';
@@ -49,6 +52,12 @@ export function AppLayout() {
     void loadFriends();
     void useMessageStore.getState().loadDeletedForMe();
   }, [loadConversations, loadFriends]);
+
+  // Subscribe the always-on Realtime channel used for call signalling so we can
+  // receive incoming calls even when no chat is open.
+  useEffect(() => {
+    callManager.init();
+  }, []);
 
   // Connectivity: track navigator.onLine plus a periodic reachability ping so a
   // "connected to Wi-Fi but no internet" state is also detected. Drives the
@@ -452,6 +461,8 @@ export function AppLayout() {
       <OfflineOverlay />
       <UpdateDialog />
       <UpdateSplash />
+      <IncomingCallDialog />
+      <CallOverlay />
     </div>
   );
 }

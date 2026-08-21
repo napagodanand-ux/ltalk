@@ -59,6 +59,25 @@ export interface Reaction {
   created_at: string;
 }
 
+export type CallType = 'voice' | 'video';
+
+export interface Call {
+  id: string;
+  conversation_id: string;
+  initiator_id: string;
+  type: CallType;
+  status: 'active' | 'ended';
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface CallParticipant {
+  call_id: string;
+  user_id: string;
+  joined_at: string;
+  left_at: string | null;
+}
+
 export type FriendshipStatus = 'pending' | 'accepted' | 'blocked';
 
 export interface Friendship {
