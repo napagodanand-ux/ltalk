@@ -110,9 +110,12 @@ export function ConversationItem({
       <ContextMenuItem
         onSelect={() => {
           if (!window.confirm('Delete this conversation? This cannot be undone.')) return;
-          void deleteConversation(conversation.id)
-            .then(() => remove(conversation.id))
-            .catch(() => undefined);
+          // Remove from the local list first so a subsequent "start chat" opens
+          // a brand-new (uncapped) conversation instead of reusing this one.
+          // The server delete is best-effort; if it fails the local removal
+          // still stands and the conversation can be restarted fresh.
+          remove(conversation.id);
+          void deleteConversation(conversation.id).catch(() => undefined);
         }}
       >
         Delete conversation

@@ -221,7 +221,10 @@ WITH CHECK (created_by = auth.uid());
 
 DROP POLICY IF EXISTS "Participants can delete conversations" ON conversations;
 CREATE POLICY "Participants can delete conversations" ON conversations FOR DELETE
-USING (created_by = auth.uid());
+USING (
+  created_by = auth.uid()
+  OR (NOT is_group AND is_participant(id))
+);
 
 DROP POLICY IF EXISTS "Users can view participants" ON conversation_participants;
 CREATE POLICY "Users can view participants" ON conversation_participants FOR SELECT
